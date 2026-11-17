@@ -111,6 +111,42 @@ CREATE TABLE job_log (
 );
 CREATE INDEX job_log_job ON job_log(job_id, id);
 `},
+	{2, `
+CREATE TABLE secrets (
+	id         INTEGER PRIMARY KEY AUTOINCREMENT,
+	purpose    TEXT NOT NULL,
+	nonce      BLOB NOT NULL,
+	ciphertext BLOB NOT NULL,
+	created_at INTEGER NOT NULL
+);
+CREATE INDEX secrets_purpose ON secrets(purpose);
+CREATE TABLE targets (
+	id               INTEGER PRIMARY KEY AUTOINCREMENT,
+	kind             TEXT NOT NULL CHECK (kind IN ('proxmox', 'ssh')),
+	name             TEXT NOT NULL UNIQUE,
+	host             TEXT NOT NULL,
+	port             INTEGER NOT NULL,
+	ssh_user         TEXT NOT NULL,
+	host_key_fp      TEXT NOT NULL,
+	api_cert_fp      TEXT NOT NULL DEFAULT '',
+	cluster          TEXT NOT NULL DEFAULT '',
+	token_id         TEXT NOT NULL DEFAULT '',
+	token_secret_ref INTEGER REFERENCES secrets(id),
+	created_at       INTEGER NOT NULL,
+	UNIQUE (host, port)
+);
+CREATE TABLE target_nodes (
+	target_id INTEGER NOT NULL REFERENCES targets(id) ON DELETE CASCADE,
+	name      TEXT NOT NULL,
+	ip        TEXT NOT NULL DEFAULT '',
+	online    INTEGER NOT NULL DEFAULT 0,
+	PRIMARY KEY (target_id, name)
+);
+`},
+	{3, `
+ALTER TABLE target_nodes ADD COLUMN host_key_fp   TEXT NOT NULL DEFAULT '';
+ALTER TABLE target_nodes ADD COLUMN host_key_type TEXT NOT NULL DEFAULT '';
+`},
 }
 
 // SchemaVersion returns the highest applied migration number.

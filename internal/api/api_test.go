@@ -17,6 +17,8 @@ import (
 	"hestia/internal/api"
 	"hestia/internal/auth"
 	"hestia/internal/jobs"
+	"hestia/internal/onboard"
+	"hestia/internal/secrets"
 	"hestia/internal/store"
 )
 
@@ -29,7 +31,16 @@ type env struct {
 
 func newEnv(t *testing.T) *env {
 	t.Helper()
-	st, err := store.Open(t.TempDir())
+	dir := t.TempDir()
+	st, err := store.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sec, err := secrets.Open(st, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := sec.EnsureIdentity(context.Background(), "testhost")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,8 +48,9 @@ func newEnv(t *testing.T) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
+	ob := (&onboard.Service{Store: st, Secrets: sec, Runner: runner, Identity: id}).Init()
 	h := api.New(api.Config{
-		Store: st, Auth: auth.New(st), Runner: runner, Mode: "serve", Version: "test",
+		Store: st, Auth: auth.New(st), Runner: runner, Onboard: ob, Identity: id, Mode: "serve", Version: "test",
 		Web: fstest.MapFS{
 			"index.html":    {Data: []byte("<html>spa</html>")},
 			"assets/app.js": {Data: []byte("console.log(1)")},

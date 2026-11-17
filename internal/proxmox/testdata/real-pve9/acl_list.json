@@ -1,0 +1,1 @@
+[{"path":"/","propagate":1,"roleid":"PVEAuditor","type":"user","ugid":"homepage@pve"},{"path":"/","propagate":1,"roleid":"PVEAuditor","type":"group","ugid":"homarr_api"},{"path":"/","propagate":1,"roleid":"PVEAuditor","type":"token","ugid":"root@pam!homepage"},{"path":"/","propagate":1,"roleid":"PVEAuditor","type":"token","ugid":"homepage@pve!homepage"}]

@@ -1,8 +1,8 @@
 <script>
   import { Server, HardDrive, Boxes } from 'lucide-svelte';
   const cards = [
-    { kind: 'proxmox', title: 'Готовый Proxmox', text: 'Подключить уже установленный Proxmox VE.', icon: Boxes, href: '#/wizard/next/proxmox' },
-    { kind: 'server', title: 'Отдельный сервер', text: 'Подключить сервер по SSH без Proxmox.', icon: Server, href: '#/wizard/next/server' },
+    { kind: 'proxmox', title: 'Готовый Proxmox', text: 'Подключить уже установленный Proxmox VE.', icon: Boxes, href: '#/wizard/proxmox' },
+    { kind: 'server', title: 'Отдельный сервер', text: 'Подключить сервер по SSH без Proxmox.', icon: Server, href: '#/wizard/server' },
     { kind: 'debian', title: 'Чистый Debian → Proxmox', text: 'Установить Proxmox VE на чистый Debian.', icon: HardDrive, disabled: true },
   ];
 </script>

@@ -12,6 +12,8 @@ import (
 
 	"hestia/internal/auth"
 	"hestia/internal/jobs"
+	"hestia/internal/onboard"
+	"hestia/internal/secrets"
 	"hestia/internal/store"
 )
 
@@ -20,9 +22,12 @@ type Config struct {
 	Store   *store.Store
 	Auth    *auth.Service
 	Runner  *jobs.Runner
-	Web     fs.FS  // built frontend rooted at index.html
-	Mode    string // "serve" or "desktop"
-	Version string
+	Onboard *onboard.Service
+	// Identity is the controller's SSH identity (public part is exposed).
+	Identity secrets.Identity
+	Web      fs.FS  // built frontend rooted at index.html
+	Mode     string // "serve" or "desktop"
+	Version  string
 }
 
 type server struct {
@@ -45,6 +50,13 @@ func New(cfg Config) http.Handler {
 	mux.HandleFunc("POST /api/v1/jobs/demo", s.requireAuth(s.demoJob))
 	mux.HandleFunc("GET /api/v1/jobs/{id}", s.requireAuth(s.getJob))
 	mux.HandleFunc("GET /api/v1/jobs/{id}/events", s.requireAuth(s.jobEvents))
+
+	mux.HandleFunc("GET /api/v1/identity", s.requireAuth(s.identity))
+	mux.HandleFunc("POST /api/v1/targets/probe", s.requireAuth(s.probeTarget))
+	mux.HandleFunc("POST /api/v1/targets", s.requireAuth(s.createTarget))
+	mux.HandleFunc("GET /api/v1/targets", s.requireAuth(s.listTargets))
+	mux.HandleFunc("GET /api/v1/targets/{id}", s.requireAuth(s.getTarget))
+	mux.HandleFunc("DELETE /api/v1/targets/{id}", s.requireAuth(s.deleteTarget))
 
 	// Unknown API paths must not fall through to the SPA.
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {

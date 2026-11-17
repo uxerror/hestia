@@ -19,6 +19,8 @@ import (
 	"hestia/internal/auth"
 	"hestia/internal/desktop"
 	"hestia/internal/jobs"
+	"hestia/internal/onboard"
+	"hestia/internal/secrets"
 	"hestia/internal/store"
 	"hestia/web"
 )
@@ -83,8 +85,25 @@ func newApp(ctx context.Context, dataDir, mode string) (*app, error) {
 		_ = st.Close()
 		return nil, fmt.Errorf("задачи: %w", err)
 	}
+	sec, err := secrets.Open(st, dataDir)
+	if err != nil {
+		runner.Shutdown()
+		_ = st.Close()
+		return nil, fmt.Errorf("секреты: %w", err)
+	}
+	hostname, _ := os.Hostname()
+	if hostname == "" {
+		hostname = "controller"
+	}
+	id, err := sec.EnsureIdentity(ctx, hostname)
+	if err != nil {
+		runner.Shutdown()
+		_ = st.Close()
+		return nil, fmt.Errorf("SSH-ключ Hestia: %w", err)
+	}
+	ob := (&onboard.Service{Store: st, Secrets: sec, Runner: runner, Identity: id}).Init()
 	h := api.New(api.Config{
-		Store: st, Auth: auth.New(st), Runner: runner,
+		Store: st, Auth: auth.New(st), Runner: runner, Onboard: ob, Identity: id,
 		Web: web.Dist(), Mode: mode, Version: version,
 	})
 	return &app{store: st, runner: runner, handler: h}, nil

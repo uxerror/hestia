@@ -18,7 +18,7 @@ func TestOpenMigrationsIdempotentAndPerms(t *testing.T) {
 	if err != nil || v != len(migrations) {
 		t.Fatalf("version = %d, %v", v, err)
 	}
-	for _, tbl := range []string{"users", "sessions", "jobs", "job_steps", "job_log", "schema_migrations"} {
+	for _, tbl := range []string{"users", "sessions", "jobs", "job_steps", "job_log", "schema_migrations", "secrets", "targets", "target_nodes"} {
 		var n int
 		if err := s.db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?`, tbl).Scan(&n); err != nil || n != 1 {
 			t.Errorf("table %s missing (%v)", tbl, err)

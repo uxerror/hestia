@@ -50,4 +50,10 @@ export const api = {
   jobs: () => request('GET', '/jobs'),
   job: (id) => request('GET', '/jobs/' + encodeURIComponent(id)),
   demoJob: () => request('POST', '/jobs/demo'),
+  identity: () => request('GET', '/identity'),
+  probeTarget: (body) => request('POST', '/targets/probe', body),
+  createTarget: (body) => request('POST', '/targets', body),
+  targets: () => request('GET', '/targets'),
+  target: (id) => request('GET', '/targets/' + encodeURIComponent(id)),
+  deleteTarget: (id, revert) => request('DELETE', '/targets/' + encodeURIComponent(id) + '?revert=' + (revert ? 'true' : 'false')),
 };

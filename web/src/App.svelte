@@ -7,6 +7,8 @@
   import Stub from './pages/Stub.svelte';
   import Jobs from './pages/Jobs.svelte';
   import JobDetail from './pages/JobDetail.svelte';
+  import Connect from './pages/Connect.svelte';
+  import Targets from './pages/Targets.svelte';
   import { Flame, LogOut, User } from 'lucide-svelte';
 
   let route = $state(parseHash(location.hash));
@@ -24,7 +26,9 @@
     await logout();
     loggingOut = false;
   }
-  const section = $derived(route.name === 'jobs' || route.name === 'job' ? 'jobs' : 'wizard');
+  const section = $derived(
+    route.name === 'jobs' || route.name === 'job' ? 'jobs' : route.name === 'targets' ? 'targets' : 'wizard',
+  );
 </script>
 
 {#if session.phase === 'loading'}
@@ -47,6 +51,7 @@
         <a href="#/wizard" class="flex items-center gap-2 text-primary font-bold text-lg"><Flame size={22} /> Hestia</a>
         <ul class="menu menu-horizontal p-0">
           <li><a href="#/wizard" class:menu-active={section === 'wizard'}>Подключение</a></li>
+          <li><a href="#/targets" class:menu-active={section === 'targets'}>Системы</a></li>
           <li><a href="#/jobs" class:menu-active={section === 'jobs'}>Задачи</a></li>
         </ul>
       </div>
@@ -61,6 +66,8 @@
     <main class="flex-1 p-4 sm:p-6 max-w-5xl w-full mx-auto">
       {#if route.name === 'jobs'}<Jobs />
       {:else if route.name === 'job'}<JobDetail id={route.id} />
+      {:else if route.name === 'targets'}<Targets />
+      {:else if route.name === 'connect'}{#key route.kind}<Connect kind={route.kind} />{/key}
       {:else if route.name === 'next'}<Stub />
       {:else}<Wizard />{/if}
     </main>
