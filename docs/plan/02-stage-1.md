@@ -46,6 +46,8 @@ AdGuard — регистрирует себя как `hestia.home` и дальш
 
 ## 1c. Самоустановка
 
+Детальная спецификация — 02d-stage-1c-selfinstall.md.
+
 На Proxmox:
 - шаблон LXC Debian 13 через `pveam` (скачать, если нет);
 - создать непривилегированный LXC `hestia`, при создании — уникальные machine-id и host keys

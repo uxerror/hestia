@@ -19,6 +19,8 @@
    репозиторий в pacman.conf.
 7. **F-Droid** — fdroidserver по каталогу APK из CI, nginx; бэкап ключа подписи; adopt .24.
 8. **Scoop** — bucket как git-репозиторий в Gitea, файлы через nginx; агент для Windows.
+8a. **Роутер MikroTik** — adopt (RouterOS API/SSH): DHCP-резервации (в т.ч. для контроллера
+   Hestia), DNS, просмотр leases; Hestia как полноценный настройщик HomeLAN.
 9. **Аудит-правила** из ручного аудита: мёртвые гости, бэкапы не тех гостей, одинаковые
    machine-id/host keys у клонов, ключи 644, сертификаты на 10 лет, заполненные диски.
 10. Iris, S3 (RustFS), SSO (LLDAP + Authelia/Authentik), мониторинг — по мере надобности.
