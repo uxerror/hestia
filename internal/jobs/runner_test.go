@@ -194,3 +194,24 @@ func TestResultIsSentWithFinalStatusAndKeptInMemory(t *testing.T) {
 		t.Log("result kept for failed jobs too (in memory only)")
 	}
 }
+
+// A job that hands itself off to the next process (the controller restarts in
+// the middle of an update) stays "running", with its step.
+func TestHandedOffJobStaysRunning(t *testing.T) {
+	s := newStore(t)
+	r, err := NewRunner(context.Background(), s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	j, _ := r.Start("t", "Тест", func(ctx context.Context, run *Run) error {
+		return run.Step("перезапуск", func(context.Context) error { return ErrHandedOff })
+	})
+	r.Wait()
+	got, err := s.GetJob(context.Background(), j.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != store.JobRunning || got.FinishedAt != nil || got.Steps[0].Status != store.StepRunning {
+		t.Fatalf("status=%s steps=%+v", got.Status, got.Steps)
+	}
+}

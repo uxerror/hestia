@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -186,26 +187,36 @@ func (s *Store) ListJobs(ctx context.Context, limit int) ([]Job, error) {
 }
 
 // FailUnfinished marks queued/running jobs as failed (used on process start)
-// and settles their unfinished steps. It returns the number of jobs changed.
-func (s *Store) FailUnfinished(ctx context.Context, msg string, now time.Time) (int, error) {
+// and settles their unfinished steps. Jobs listed in keep are left alone (the
+// update job closes itself after the restart). It returns the number of jobs
+// changed.
+func (s *Store) FailUnfinished(ctx context.Context, msg string, now time.Time, keep ...string) (int, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
 	}
 	defer func() { _ = tx.Rollback() }()
 	t := ms(now)
+	// Only "?" placeholders are built here; the ids are bound as parameters.
+	notKept, extra := "", []any(nil)
+	if len(keep) > 0 {
+		notKept = ` AND id NOT IN (?` + strings.Repeat(`,?`, len(keep)-1) + `)`
+		for _, id := range keep {
+			extra = append(extra, id)
+		}
+	}
 	if _, err := tx.ExecContext(ctx, `UPDATE job_steps SET status = ?, finished_at = ?, error = ?
-		WHERE status = ? AND job_id IN (SELECT id FROM jobs WHERE status IN (?, ?))`,
-		StepFailed, t, msg, StepRunning, JobQueued, JobRunning); err != nil {
+		WHERE status = ? AND job_id IN (SELECT id FROM jobs WHERE status IN (?, ?)`+notKept+`)`,
+		append([]any{StepFailed, t, msg, StepRunning, JobQueued, JobRunning}, extra...)...); err != nil {
 		return 0, err
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE job_steps SET status = ?, finished_at = ?
-		WHERE status = ? AND job_id IN (SELECT id FROM jobs WHERE status IN (?, ?))`,
-		StepSkipped, t, StepPending, JobQueued, JobRunning); err != nil {
+		WHERE status = ? AND job_id IN (SELECT id FROM jobs WHERE status IN (?, ?)`+notKept+`)`,
+		append([]any{StepSkipped, t, StepPending, JobQueued, JobRunning}, extra...)...); err != nil {
 		return 0, err
 	}
-	res, err := tx.ExecContext(ctx, `UPDATE jobs SET status = ?, finished_at = ?, error = ? WHERE status IN (?, ?)`,
-		JobFailed, t, msg, JobQueued, JobRunning)
+	res, err := tx.ExecContext(ctx, `UPDATE jobs SET status = ?, finished_at = ?, error = ? WHERE status IN (?, ?)`+notKept,
+		append([]any{JobFailed, t, msg, JobQueued, JobRunning}, extra...)...)
 	if err != nil {
 		return 0, err
 	}

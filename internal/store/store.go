@@ -50,6 +50,10 @@ func Open(dir string) (*Store, error) {
 		return nil, err
 	}
 	s := &Store{db: db}
+	if err := s.checkSchemaNotNewer(context.Background()); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 	if err := s.migrate(context.Background()); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
@@ -166,6 +170,41 @@ CREATE TABLE handoff_tokens (
 	expires_at INTEGER NOT NULL
 );
 `},
+}
+
+// KnownSchema is the newest schema version this binary can work with.
+func KnownSchema() int {
+	n := 0
+	for _, m := range migrations {
+		if m.version > n {
+			n = m.version
+		}
+	}
+	return n
+}
+
+// ErrSchemaNewer is returned by Open for a database written by a newer Hestia.
+var ErrSchemaNewer = errors.New("база создана более новой версией Hestia")
+
+// checkSchemaNotNewer refuses a database with a schema newer than this binary
+// knows: an old binary left running after a failed upgrade must not touch it.
+func (s *Store) checkSchemaNotNewer(ctx context.Context) error {
+	var n int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'`).Scan(&n); err != nil || n == 0 {
+		return err
+	}
+	have, err := s.SchemaVersion(ctx)
+	if err != nil {
+		return err
+	}
+	if have <= KnownSchema() {
+		return nil
+	}
+	by := ""
+	if v, err := s.GetSetting(ctx, SettingWrittenBy); err == nil && v != "" {
+		by = " " + v
+	}
+	return fmt.Errorf("%w%s (схема %d, эта версия знает %d): запустите более новую Hestia", ErrSchemaNewer, by, have, KnownSchema())
 }
 
 // SchemaVersion returns the highest applied migration number.

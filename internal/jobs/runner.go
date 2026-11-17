@@ -17,6 +17,12 @@ import (
 // InterruptedMsg is the error set on jobs left unfinished by a restart.
 const InterruptedMsg = "прервано перезапуском"
 
+// ErrHandedOff is returned by a job body (or a step) that has handed the rest
+// of its work over to the next process: the controller restarts itself in the
+// middle of an update. The job and the step stay "running" in the database and
+// are closed after the restart (see update.Finalize).
+var ErrHandedOff = errors.New("job handed off to the next process")
+
 // Func is the body of a job.
 type Func func(ctx context.Context, r *Run) error
 
@@ -37,9 +43,9 @@ type Runner struct {
 const maxResults = 20
 
 // NewRunner creates a Runner and marks jobs left unfinished by a previous
-// process as failed.
-func NewRunner(ctx context.Context, s *store.Store) (*Runner, error) {
-	if _, err := s.FailUnfinished(ctx, InterruptedMsg, time.Now()); err != nil {
+// process as failed (except the ones in keep, which the caller closes itself).
+func NewRunner(ctx context.Context, s *store.Store, keep ...string) (*Runner, error) {
+	if _, err := s.FailUnfinished(ctx, InterruptedMsg, time.Now(), keep...); err != nil {
 		return nil, err
 	}
 	rctx, stop := context.WithCancel(ctx)
@@ -88,6 +94,9 @@ func (r *Runner) run(j store.Job, fn Func) {
 	r.publishStatus(j.ID, store.JobRunning, "", nil)
 
 	err := safeCall(r.ctx, run, fn)
+	if errors.Is(err, ErrHandedOff) {
+		return // stays "running" for the next process to close
+	}
 	if err == nil {
 		err = run.stepErr // a failed step fails the job even if fn swallowed the error
 	}
@@ -201,6 +210,9 @@ func (r *Run) Step(title string, fn func(ctx context.Context) error) error {
 	err := r.ctx.Err()
 	if err == nil {
 		err = fn(r.ctx)
+	}
+	if errors.Is(err, ErrHandedOff) {
+		return err // the step stays "running" too
 	}
 	fin := time.Now().UTC()
 	status, msg := store.StepDone, ""

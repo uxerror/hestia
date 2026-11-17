@@ -36,3 +36,11 @@ RestartSec=3
 WantedBy=multi-user.target
 `, svcUser, binPath, port, dataPath)
 }
+
+// Exported names of the same locations, for the updater.
+const (
+	BinPath  = binPath
+	UnitPath = unitPath
+	DataPath = dataPath
+	SvcUser  = svcUser
+)

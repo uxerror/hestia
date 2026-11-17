@@ -16,6 +16,10 @@ import (
 const (
 	SettingInstanceID         = "instance_id"
 	SettingControllerLocation = "controller_location"
+	SettingUpdateCheck        = "update_check"
+	// SettingWrittenBy is the version of the Hestia that last opened the
+	// database; it names the culprit when an older binary refuses it.
+	SettingWrittenBy = "written_by"
 )
 
 // GetSetting returns a setting value, or ErrNotFound.

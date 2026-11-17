@@ -1,7 +1,8 @@
-// Hash routes: #/install, #/handoff/<token>, #/wizard, #/wizard/proxmox, #/wizard/server, #/targets, #/targets/<id>[/<node>], #/jobs, #/jobs/<id>
+// Hash routes: #/install, #/handoff/<token>, #/wizard, #/wizard/proxmox, #/wizard/server, #/targets, #/targets/<id>[/<node>], #/jobs, #/jobs/<id>, #/update/offer?…
 export function parseHash(hash) {
-  const parts = (hash || '').replace(/^#\/?/, '').split('/').filter(Boolean);
+  const parts = (hash || '').split('?')[0].replace(/^#\/?/, '').split('/').filter(Boolean);
   if (parts[0] === 'jobs') return parts[1] ? { name: 'job', id: decodeURIComponent(parts[1]) } : { name: 'jobs' };
+  if (parts[0] === 'update' && parts[1] === 'offer') return { name: 'update-offer', hash: hash || '' };
   if (parts[0] === 'install') return { name: 'install' };
   if (parts[0] === 'handoff') return { name: 'handoff', token: parts[1] ? decodeURIComponent(parts[1]) : '' };
   if (parts[0] === 'targets') {

@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"debug/elf"
 	"os"
 
 	"hestia/internal/inventory"
@@ -165,14 +164,14 @@ func (s *Service) readBinary() ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("серверный бинарник: %w", err)
 	}
-	if f, err := elf.Open(exe); err == nil {
-		dynamic := f.Section(".interp") != nil
-		_ = f.Close()
-		if dynamic {
-			return nil, errors.New("этот бинарник слинкован динамически и не подойдёт для сервера: соберите его с CGO_ENABLED=0 (make server)")
-		}
+	b, err := os.ReadFile(exe)
+	if err != nil {
+		return nil, fmt.Errorf("серверный бинарник: %w", err)
 	}
-	return os.ReadFile(exe)
+	if err := ValidateServerBinary(b); err != nil {
+		return nil, err
+	}
+	return b, nil
 }
 
 // ---- Proxmox ----

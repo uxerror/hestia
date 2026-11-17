@@ -12,6 +12,9 @@
   import Guests from './pages/Guests.svelte';
   import Install from './pages/Install.svelte';
   import Moved from './pages/Moved.svelte';
+  import UpdateOffer from './pages/UpdateOffer.svelte';
+  import { updateInfo, loadUpdateInfo } from './lib/updateinfo.svelte.js';
+  import { badgeText } from './lib/update.js';
   import { Flame, LogOut, User } from 'lucide-svelte';
 
   let route = $state(parseHash(location.hash));
@@ -32,13 +35,22 @@
     return () => window.removeEventListener('hashchange', h);
   });
 
+  // The "update available" badge: refreshed when the app opens and every 30 minutes.
+  $effect(() => {
+    if (session.phase !== 'app') return;
+    loadUpdateInfo();
+    const t = setInterval(loadUpdateInfo, 30 * 60 * 1000);
+    return () => clearInterval(t);
+  });
+  const badge = $derived(badgeText(updateInfo.status));
+
   async function doLogout() {
     loggingOut = true;
     await logout();
     loggingOut = false;
   }
   const section = $derived(
-    route.name === 'jobs' || route.name === 'job' ? 'jobs' : route.name === 'targets' || route.name === 'guests' || route.name === 'install' ? 'targets' : 'wizard',
+    route.name === 'jobs' || route.name === 'job' ? 'jobs' : route.name === 'targets' || route.name === 'guests' || route.name === 'install' || route.name === 'update-offer' ? 'targets' : 'wizard',
   );
 </script>
 
@@ -69,6 +81,7 @@
         </ul>
       </div>
       <div class="flex-none flex items-center gap-2">
+        {#if badge}<a href="#/targets" class="badge badge-info gap-1" data-testid="update-badge">{badge}</a>{/if}
         <span class="flex items-center gap-1 text-sm" data-testid="user"><User size={16} /> {session.user?.username}</span>
         <button class="btn btn-ghost btn-sm" onclick={doLogout} disabled={loggingOut}>
           {#if loggingOut}<span class="loading loading-spinner loading-xs"></span>{:else}<LogOut size={16} />{/if}
@@ -86,6 +99,7 @@
       {:else if route.name === 'job'}<JobDetail id={route.id} />
       {:else if route.name === 'targets'}<Targets />
       {:else if route.name === 'install'}<Install />
+      {:else if route.name === 'update-offer'}{#key route.hash}<UpdateOffer hash={route.hash} />{/key}
       {:else if route.name === 'guests'}{#key route.id}<Guests id={route.id} node={route.node} />{/key}
       {:else if route.name === 'connect'}{#key route.kind}<Connect kind={route.kind} />{/key}
       {:else if route.name === 'next'}<Stub />

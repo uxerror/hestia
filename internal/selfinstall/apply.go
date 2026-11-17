@@ -2,8 +2,6 @@ package selfinstall
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/url"
@@ -187,30 +185,9 @@ func (in *installer) logSh(ctx context.Context, script string) (sshx.Result, err
 	return in.sh(ctx, script, nil)
 }
 
-// putFile writes data through stdin, then fixes mode/owner and verifies the
-// sha256 of the stored file.
+// putFile writes data through stdin, fixes mode/owner and verifies the sha256.
 func (in *installer) putFile(ctx context.Context, path string, data []byte, mode, owner string) error {
-	sum := sha256.Sum256(data)
-	want := hex.EncodeToString(sum[:])
-	in.run.Log("info", fmt.Sprintf("→ %s (%d байт, sha256 %s…)", path, len(data), want[:12]))
-	q := target.Quote(path)
-	script := "cat > " + q + " && chmod " + mode + " " + q
-	if owner != "" {
-		script += " && chown " + owner + " " + q
-	}
-	uctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
-	defer cancel()
-	if _, err := in.sh(uctx, script, data); err != nil {
-		return fmt.Errorf("запись %s: %w", path, err)
-	}
-	r, err := in.sh(ctx, "sha256sum "+q, nil)
-	if err != nil {
-		return fmt.Errorf("проверка %s: %w", path, err)
-	}
-	if f := strings.Fields(r.Stdout); len(f) == 0 || f[0] != want {
-		return fmt.Errorf("контрольная сумма %s не совпала после записи", path)
-	}
-	return nil
+	return putFile(ctx, in.sh, func(l string) { in.run.Log("info", l) }, path, data, mode, owner)
 }
 
 // ---- Proxmox (LXC) ----
@@ -241,20 +218,20 @@ func (in *installer) nodeExec(ctx context.Context, cmd string) (sshx.Result, err
 	return in.cl.Exec(ctx, cmd, nil)
 }
 
-func (in *installer) ctShell() shellFn {
-	pfx := "pct exec " + strconv.Itoa(in.vmid) + " -- sh -c "
-	return func(ctx context.Context, script string, stdin []byte) (sshx.Result, error) {
-		if in.cl == nil || !in.cl.Alive() {
-			if in.cl != nil {
-				_ = in.cl.Close()
-			}
-			if err := in.nodeLogin(ctx); err != nil {
-				return sshx.Result{}, err
-			}
+// nodeClient returns the live SSH connection to the node, reconnecting if needed.
+func (in *installer) nodeClient(ctx context.Context) (*sshx.Client, error) {
+	if in.cl == nil || !in.cl.Alive() {
+		if in.cl != nil {
+			_ = in.cl.Close()
 		}
-		return in.cl.Exec(ctx, pfx+target.Quote(script), stdin)
+		if err := in.nodeLogin(ctx); err != nil {
+			return nil, err
+		}
 	}
+	return in.cl, nil
 }
+
+func (in *installer) ctShell() shellFn { return pctShell(in.vmid, in.nodeClient) }
 
 // wait waits for a Proxmox task, relaying its log into the job log.
 func (in *installer) wait(ctx context.Context, upid string) error {

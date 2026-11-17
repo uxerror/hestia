@@ -2,8 +2,11 @@ package store
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -222,5 +225,65 @@ func TestSnapshotCopyAndArchive(t *testing.T) {
 	defer re.Close()
 	if n, _ := re.CountUsers(ctx); n != 1 {
 		t.Fatal("archived database lost data")
+	}
+}
+
+// A database written by a newer Hestia is refused, untouched, with a message
+// that names the culprit.
+func TestOpenRefusesNewerSchema(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if err := s.SetSetting(ctx, SettingWrittenBy, "v9.0.0"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`INSERT INTO schema_migrations(version, applied_at) VALUES (?, 0)`, KnownSchema()+1); err != nil {
+		t.Fatal(err)
+	}
+	_ = s.Close()
+	_, err = Open(dir)
+	if !errors.Is(err, ErrSchemaNewer) || !strings.Contains(err.Error(), "v9.0.0") {
+		t.Fatalf("err = %v", err)
+	}
+	// the refusal leaves the file as it was: still the same schema
+	raw, err := sql.Open("sqlite", filepath.Join(dir, "hestia.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer raw.Close()
+	var max int
+	_ = raw.QueryRow(`SELECT MAX(version) FROM schema_migrations`).Scan(&max)
+	if max != KnownSchema()+1 {
+		t.Fatalf("schema changed: %d", max)
+	}
+}
+
+func TestFailUnfinishedKeepsListedJobs(t *testing.T) {
+	s, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	now := time.Now()
+	for _, id := range []string{"keep", "drop"} {
+		if err := s.InsertJob(ctx, Job{ID: id, Kind: "k", Title: id, Status: JobRunning, CreatedAt: now}); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.InsertStep(ctx, id, Step{Idx: 0, Title: "s", Status: StepRunning, StartedAt: &now}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	n, err := s.FailUnfinished(ctx, "прервано", now, "keep")
+	if err != nil || n != 1 {
+		t.Fatalf("n=%d err=%v", n, err)
+	}
+	k, _ := s.GetJob(ctx, "keep")
+	d, _ := s.GetJob(ctx, "drop")
+	if k.Status != JobRunning || k.Steps[0].Status != StepRunning || d.Status != JobFailed || d.Steps[0].Status != StepFailed {
+		t.Fatalf("keep=%s/%s drop=%s/%s", k.Status, k.Steps[0].Status, d.Status, d.Steps[0].Status)
 	}
 }

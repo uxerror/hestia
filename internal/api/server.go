@@ -17,6 +17,7 @@ import (
 	"hestia/internal/secrets"
 	"hestia/internal/selfinstall"
 	"hestia/internal/store"
+	"hestia/internal/update"
 )
 
 // Config holds the dependencies of the HTTP handler.
@@ -33,10 +34,12 @@ type Config struct {
 	// transfer/moved modes (both optional in tests).
 	Selfinstall *selfinstall.Service
 	Gate        *selfinstall.Gate
-	InstanceID  string
-	Web         fs.FS  // built frontend rooted at index.html
-	Mode        string // "serve" or "desktop"
-	Version     string
+	// Update updates the installed controller (optional in tests).
+	Update     *update.Service
+	InstanceID string
+	Web        fs.FS  // built frontend rooted at index.html
+	Mode       string // "serve" or "desktop"
+	Version    string
 }
 
 type server struct {
@@ -82,6 +85,13 @@ func New(cfg Config) http.Handler {
 		mux.HandleFunc("GET /api/v1/selfinstall", s.requireAuth(s.selfinstallState))
 		mux.HandleFunc("POST /api/v1/selfinstall/probe", s.requireAuth(s.selfinstallProbe))
 		mux.HandleFunc("POST /api/v1/selfinstall", s.requireAuth(s.selfinstallStart))
+	}
+
+	if cfg.Update != nil {
+		mux.HandleFunc("GET /api/v1/update", s.requireAuth(s.updateStatus))
+		mux.HandleFunc("POST /api/v1/update/check", s.requireAuth(s.updateCheck))
+		mux.HandleFunc("POST /api/v1/update/upload", s.requireAuth(s.updateUpload))
+		mux.HandleFunc("POST /api/v1/update", s.requireAuth(s.updateStart))
 	}
 
 	// Unknown API paths must not fall through to the SPA.

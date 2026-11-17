@@ -71,3 +71,32 @@ func TestNormalStartCreatesInstanceID(t *testing.T) {
 		t.Fatalf("health: %s", buf[:n])
 	}
 }
+
+func TestHealthcheckCommand(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/health" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(`{"status":"ok","version":"v0.2.0"}`))
+	}))
+	defer srv.Close()
+	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"status":"starting","version":"v0.2.0"}`))
+	}))
+	defer bad.Close()
+	for _, c := range []struct {
+		args []string
+		want int
+	}{
+		{[]string{"--url", srv.URL}, 0},
+		{[]string{"--url", srv.URL, "--version", "v0.2.0"}, 0},
+		{[]string{"--url", srv.URL, "--version", "v0.3.0"}, 1},
+		{[]string{"--url", bad.URL}, 1},
+		{[]string{"--url", "http://127.0.0.1:1", "--timeout", "200ms"}, 1},
+	} {
+		if got := run(append([]string{"healthcheck"}, c.args...)); got != c.want {
+			t.Errorf("%v: exit %d, want %d", c.args, got, c.want)
+		}
+	}
+}

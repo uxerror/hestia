@@ -24,6 +24,8 @@ import (
 	"hestia/internal/secrets"
 	"hestia/internal/selfinstall"
 	"hestia/internal/store"
+	"hestia/internal/update"
+	vers "hestia/internal/version"
 	"hestia/web"
 )
 
@@ -42,6 +44,8 @@ func run(args []string) int {
 		return cmdServe(args[1:])
 	case "desktop":
 		return cmdDesktop(args[1:])
+	case "healthcheck":
+		return cmdHealthcheck(args[1:])
 	case "version", "--version", "-v":
 		fmt.Println("hestia", version)
 		return 0
@@ -63,6 +67,8 @@ func usage() {
 
 Если в каталоге данных есть remote.json, Hestia уже перенесена на сервер: база не
 открывается, показывается экран «Hestia работает на <адрес>».
+  healthcheck --url http://127.0.0.1:80 [--version X]
+                                                  проверка здоровья (для скрипта обновления)
   version                                         версия
 `)
 }
@@ -104,7 +110,10 @@ func newApp(ctx context.Context, dataDir, mode string) (*app, error) {
 	if err != nil {
 		return nil, fmt.Errorf("база данных: %w", err)
 	}
-	runner, err := jobs.NewRunner(ctx, st)
+	_ = st.SetSetting(ctx, store.SettingWrittenBy, version)
+	// An update job handed over by the previous process is closed below, not
+	// marked "interrupted".
+	runner, err := jobs.NewRunner(ctx, st, update.Pending(dataDir))
 	if err != nil {
 		_ = st.Close()
 		return nil, fmt.Errorf("задачи: %w", err)
@@ -136,14 +145,20 @@ func newApp(ctx context.Context, dataDir, mode string) (*app, error) {
 	ob.AfterChange = inv.RefreshQuiet
 	invCtx, stopInv := context.WithCancel(ctx)
 	inv.Start(invCtx)
+	if err := update.Finalize(ctx, st, dataDir, version); err != nil {
+		slog.Warn("update.json", "err", err)
+	}
 	gate := &selfinstall.Gate{}
 	si := (&selfinstall.Service{
 		Store: st, Secrets: sec, Runner: runner, Identity: id, Gate: gate, DataDir: dataDir, Version: version,
 		OnSwitched: stopInv,
 	}).Init()
+	up := (&update.Service{Store: st, Runner: runner, DataDir: dataDir, Version: version, Self: si}).Init()
+	up.CleanTemp()
+	up.StartChecks(invCtx)
 	h := api.New(api.Config{
 		Store: st, Auth: auth.New(st), Runner: runner, Onboard: ob, Inventory: inv, Identity: id,
-		Selfinstall: si, Gate: gate, InstanceID: instanceID,
+		Selfinstall: si, Gate: gate, Update: up, InstanceID: instanceID,
 		Web: web.Dist(), Mode: mode, Version: version,
 	})
 	return &app{store: st, runner: runner, handler: h, stopInv: stopInv, inv: inv, gate: gate}, nil
@@ -214,6 +229,10 @@ func cmdDesktop(args []string) int {
 		ctx, cancel := context.WithTimeout(context.Background(), selfinstall.CheckTimeout+time.Second)
 		if selfinstall.CheckRemote(ctx, *a.remote) {
 			start = a.remote.URL
+			if u, stop := offerUpdate(ctx, *a.remote, version); u != "" {
+				start = u
+				defer stop()
+			}
 		}
 		cancel()
 	}
@@ -229,4 +248,36 @@ func defaultDesktopData() string {
 		return "./data"
 	}
 	return filepath.Join(home, ".local", "share", "hestia")
+}
+
+// offerUpdate compares the controller's version with this app's. If the app
+// is newer it starts the loopback helper that hands out the embedded binary
+// and returns the update screen to open; if the app is older it returns the
+// screen with the notice. stop shuts the helper down.
+func offerUpdate(ctx context.Context, rem selfinstall.Remote, appVersion string) (string, func()) {
+	remoteVer, err := healthVersion(ctx, rem.URL, selfinstall.CheckTimeout)
+	if err != nil {
+		return "", nil
+	}
+	switch {
+	case vers.Offer(remoteVer, appVersion):
+		payload, err := selfinstall.PayloadBinary()
+		if err != nil {
+			return "", nil // this build has no binary to offer
+		}
+		h, err := update.NewHelper(payload, appVersion, rem.URL)
+		if err != nil {
+			return "", nil
+		}
+		ln, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			return "", nil
+		}
+		srv := &http.Server{Handler: h.Handler(), ReadHeaderTimeout: 10 * time.Second}
+		go func() { _ = srv.Serve(ln) }()
+		return update.OfferURL(rem.URL, ln.Addr().String(), appVersion, h.Nonce()), func() { _ = srv.Close() }
+	case vers.Offer(appVersion, remoteVer):
+		return update.OlderURL(rem.URL, appVersion), func() {}
+	}
+	return "", nil
 }
