@@ -35,11 +35,12 @@ export function applyEvent(job, type, data) {
   }
   if (type === 'log') return { ...job, log: [...job.log, data] };
   if (type === 'status') {
-    const { status, error, started_at, finished_at } = data;
+    const { status, error, started_at, finished_at, result } = data;
     const next = { ...job, status: status ?? job.status };
     if (error !== undefined) next.error = error;
     if (started_at !== undefined) next.started_at = started_at;
     if (finished_at !== undefined) next.finished_at = finished_at;
+    if (result !== undefined) next.result = result; // in-memory result (e.g. the handoff link)
     return next;
   }
   return job;

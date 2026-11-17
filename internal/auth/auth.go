@@ -114,6 +114,38 @@ func (s *Service) Authenticate(ctx context.Context, token string) (store.User, e
 	return u, err
 }
 
+// HandoffTTL is how long a handoff token can be used.
+const HandoffTTL = 10 * time.Minute
+
+// ErrBadHandoff means the handoff token is unknown, used or expired.
+var ErrBadHandoff = errors.New("ссылка для входа недействительна или устарела")
+
+// NewHandoff returns a random one-time login token and the hash to store.
+func NewHandoff() (token, hash string, err error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", "", err
+	}
+	token = base64.RawURLEncoding.EncodeToString(b)
+	return token, hashToken(token), nil
+}
+
+// Handoff exchanges a one-time token (made by NewHandoff, stored in the
+// database that was moved to this controller) for a session token.
+func (s *Service) Handoff(ctx context.Context, token string) (string, error) {
+	if token == "" {
+		return "", ErrBadHandoff
+	}
+	uid, err := s.store.ConsumeHandoff(ctx, hashToken(token), s.now())
+	if errors.Is(err, store.ErrNotFound) {
+		return "", ErrBadHandoff
+	}
+	if err != nil {
+		return "", err
+	}
+	return s.newSession(ctx, uid)
+}
+
 func (s *Service) newSession(ctx context.Context, userID int64) (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {

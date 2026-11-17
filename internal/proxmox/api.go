@@ -11,6 +11,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -101,12 +102,30 @@ func NewClient(cfg ClientConfig) *Client {
 }
 
 func (c *Client) get(ctx context.Context, path string, out any) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+path, nil)
+	return c.do(ctx, http.MethodGet, path, nil, out)
+}
+
+// do sends one request. Bodies (POST/PUT) are form-encoded, as the Proxmox
+// API expects; DELETE parameters go into the query string. out may be nil.
+func (c *Client) do(ctx context.Context, method, path string, params url.Values, out any) error {
+	var body io.Reader
+	target := c.base + path
+	if len(params) > 0 {
+		if method == http.MethodPost || method == http.MethodPut {
+			body = strings.NewReader(params.Encode())
+		} else {
+			target += "?" + params.Encode()
+		}
+	}
+	req, err := http.NewRequestWithContext(ctx, method, target, body)
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Authorization", c.auth)
 	req.Header.Set("Accept", "application/json")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	}
 	resp, err := c.http.Do(req)
 	if err != nil {
 		if errors.Is(err, ErrCertChanged) {
@@ -115,15 +134,21 @@ func (c *Client) get(ctx context.Context, path string, out any) error {
 		return fmt.Errorf("запрос к API Proxmox: %w", sanitizeURLErr(err))
 	}
 	defer resp.Body.Close()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if resp.StatusCode != http.StatusOK {
-		return &APIError{Status: resp.StatusCode, Detail: errorDetail(body)}
+		return &APIError{Status: resp.StatusCode, Detail: errorDetail(data)}
+	}
+	if out == nil {
+		return nil
 	}
 	var env struct {
 		Data json.RawMessage `json:"data"`
 	}
-	if err := json.Unmarshal(body, &env); err != nil {
+	if err := json.Unmarshal(data, &env); err != nil {
 		return fmt.Errorf("разбор ответа API Proxmox: %w", err)
+	}
+	if len(env.Data) == 0 || string(env.Data) == "null" {
+		return nil
 	}
 	return json.Unmarshal(env.Data, out)
 }

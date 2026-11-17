@@ -8,7 +8,7 @@
   import NodeCard from '../components/NodeCard.svelte';
   import StorageList from '../components/StorageList.svelte';
   import RoleFix from '../components/RoleFix.svelte';
-  import { Boxes, Server, Trash2, Plus, KeyRound, RefreshCw, List } from 'lucide-svelte';
+  import { Boxes, Server, Trash2, Plus, KeyRound, RefreshCw, List, CloudUpload } from 'lucide-svelte';
 
   const live = createLive();
   let targets = $state([]);
@@ -19,6 +19,11 @@
   let revert = $state(true);
   let deleting = $state(false);
   let dlg = $state();
+  let place = $state(null); // GET /selfinstall: where this Hestia runs
+
+  $effect(() => {
+    api.selfinstall().then((r) => (place = r)).catch(() => {});
+  });
 
   async function loadTargets() {
     try {
@@ -72,6 +77,22 @@
 </div>
 
 {#if error}<div class="alert alert-error mb-4" role="alert">{error}</div>{/if}
+
+{#if place?.state === 'local'}
+  <div class="card bg-base-200 mb-4" data-testid="install-card">
+    <div class="card-body gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div class="flex gap-3 items-start">
+        <CloudUpload size={22} class="text-primary mt-0.5" />
+        <p class="text-sm">Hestia сейчас работает на этом ПК. Установите её на сервер, чтобы она работала постоянно.</p>
+      </div>
+      <a class="btn btn-primary btn-sm" href={targets.length ? '#/install' : '#/wizard'} data-testid="install-btn">
+        {targets.length ? 'Установить на сервер' : 'Подключить систему'}
+      </a>
+    </div>
+  </div>
+{:else if place?.state === 'installed'}
+  <div class="alert mb-4 text-sm" data-testid="installed-note">Hestia работает на сервере: {place.location?.ip}{place.location?.vmid ? ` (контейнер ${place.location.vmid})` : ''}.</div>
+{/if}
 
 {#if loading}
   <div class="flex justify-center py-12"><span class="loading loading-spinner loading-lg"></span></div>

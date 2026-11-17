@@ -419,3 +419,220 @@ test('router: guests routes', async () => {
   assert.equal(parseHash('#/targets/0').name, 'targets');
   env.dispose();
 });
+
+test('router: install and handoff routes', async () => {
+  const env = setupEnv();
+  const { parseHash } = await env.import('lib/router.js');
+  assert.deepEqual(parseHash('#/install'), { name: 'install' });
+  assert.deepEqual(parseHash('#/handoff/abc-DEF_123'), { name: 'handoff', token: 'abc-DEF_123' });
+  assert.deepEqual(parseHash('#/handoff'), { name: 'handoff', token: '' });
+  env.dispose();
+});
+
+test('selfinstall: default target is the first Proxmox', async () => {
+  const env = setupEnv();
+  const m = await env.import('lib/selfinstall.js');
+  assert.equal(m.defaultTargetId([{ id: 1, kind: 'ssh' }, { id: 2, kind: 'proxmox' }, { id: 3, kind: 'proxmox' }]), 2);
+  assert.equal(m.defaultTargetId([{ id: 5, kind: 'ssh' }]), 5);
+  assert.equal(m.defaultTargetId([]), 0);
+  env.dispose();
+});
+
+test('selfinstall: probe request carries only the edited fields, typed', async () => {
+  const env = setupEnv();
+  const m = await env.import('lib/selfinstall.js');
+  assert.deepEqual(m.buildProbeRequest(4, {}), { target_id: 4 });
+  assert.deepEqual(
+    m.buildProbeRequest(4, { node: 'pve2', vmid: '903', cores: '2', memory_mb: ' 1024 ', disk_gb: '8', ip: '192.168.1.20/24', gateway: '192.168.1.1', hostname: '  ', bridge: 'vmbr1', port: 'x' }),
+    { target_id: 4, node: 'pve2', bridge: 'vmbr1', gateway: '192.168.1.1', vmid: 903, cores: 2, memory_mb: 1024, disk_gb: 8, ip: '192.168.1.20/24' },
+  );
+  assert.deepEqual(m.buildProbeRequest(4, { ip: 'dhcp', port: '8080' }), { target_id: 4, port: 8080, ip: 'dhcp' });
+  env.dispose();
+});
+
+const sampleProbe = {
+  probe_id: 'p1', kind: 'lxc', warnings: [], plan: [{ id: 'template', title: 'Шаблон', detail: '' }],
+  params: { node: 'pve1', vmid: 900, hostname: 'hestia', storage: 'local-lvm', template_storage: 'local', bridge: 'vmbr0', ip: 'dhcp', cores: 1, memory_mb: 512, swap_mb: 512, disk_gb: 4, template: 'debian-13-standard_13.6-1_amd64.tar.zst', template_present: true },
+  choices: { nodes: ['pve1', 'pve2'], storages: [{ name: 'local-lvm' }], template_storages: ['local'], bridges: ['vmbr0'] },
+};
+
+test('selfinstall flow: probe → review → start → running → done with the result', async () => {
+  const env = setupEnv();
+  const { installReducer: r, initialInstall: init, fieldValue, hasStaticIP, summarize, resultSummary, handoffHref } = await env.import('lib/selfinstall.js');
+  let s = r(init, { type: 'probing' });
+  assert.equal(s.phase, 'probing');
+  s = r(s, { type: 'probed', probe: sampleProbe });
+  assert.equal(s.phase, 'review');
+  assert.equal(fieldValue(s.probe, s.dirty, 'vmid'), 900);
+  assert.equal(hasStaticIP(s.probe, s.dirty), false);
+  const sum = Object.fromEntries(summarize(sampleProbe));
+  assert.equal(sum['Узел'], 'pve1');
+  assert.equal(sum['VMID'], '900');
+  assert.equal(sum['Адрес'], 'DHCP');
+  assert.match(sum['Шаблон'], /уже скачан/);
+  assert.match(sum['Ресурсы'], /1 vCPU, 512 МБ RAM, 512 МБ swap, диск 4 ГБ \(local-lvm\)/);
+  s = r(s, { type: 'starting' });
+  s = r(s, { type: 'started', job: { id: 'j1', status: 'queued', steps: [] } });
+  assert.equal(s.phase, 'running');
+  s = r(s, { type: 'job', job: { id: 'j1', status: 'running', steps: [] } });
+  assert.equal(s.phase, 'running');
+  const result = { url: 'http://198.51.100.7', handoff_url: 'http://198.51.100.7/#/handoff/tok', ip: '198.51.100.7', mac: 'BC:24:11:BC:4C:F6', vmid: 900, node: 'pve1', hint: 'Закрепите адрес' };
+  s = r(s, { type: 'job', job: { id: 'j1', status: 'done', steps: [], result } });
+  assert.equal(s.phase, 'done');
+  assert.equal(s.result.mac, 'BC:24:11:BC:4C:F6');
+  assert.equal(handoffHref(s.result), 'http://198.51.100.7/#/handoff/tok');
+  const rows = Object.fromEntries(resultSummary(s.result));
+  assert.equal(rows['Адрес Hestia'], 'http://198.51.100.7');
+  assert.equal(rows['MAC'], 'BC:24:11:BC:4C:F6');
+  assert.equal(rows['Контейнер'], '900 на узле pve1');
+  assert.ok(!JSON.stringify(rows).includes('tok'), 'the token is not displayed');
+  assert.equal(handoffHref(null), '');
+  env.dispose();
+});
+
+test('selfinstall flow: failures, expiry and the "Подробнее" fields', async () => {
+  const env = setupEnv();
+  const { installReducer: r, initialInstall: init, fieldValue, hasStaticIP } = await env.import('lib/selfinstall.js');
+  // first probe fails → back to the picker with the message
+  let s = r(r(init, { type: 'probing' }), { type: 'probe_failed', error: 'порт занят' });
+  assert.equal(s.phase, 'pick');
+  assert.equal(s.error, 'порт занят');
+  // editing + re-check keeps the form
+  s = r(r(init, { type: 'probing' }), { type: 'probed', probe: sampleProbe });
+  s = r(s, { type: 'toggle_details' });
+  assert.equal(s.details, true);
+  s = r(s, { type: 'edit_field', field: 'ip', value: '192.168.1.20/24' });
+  s = r(s, { type: 'edit_field', field: 'storage', value: 'local-lvm' });
+  s = r(s, { type: 'edit_field', field: 'vmid', value: '903' });
+  assert.equal(hasStaticIP(s.probe, s.dirty), true);
+  assert.equal(fieldValue(s.probe, s.dirty, 'vmid'), '903');
+  s = r(s, { type: 'reprobing' });
+  assert.equal(s.phase, 'probing');
+  assert.ok(s.probe && s.dirty.vmid === '903', 'a re-check keeps the form');
+  s = r(s, { type: 'probe_failed', error: 'VMID 903 уже занят' });
+  assert.equal(s.phase, 'review');
+  assert.equal(s.error, 'VMID 903 уже занят');
+  assert.equal(s.dirty.ip, '192.168.1.20/24');
+  // changing the node forgets what depends on it
+  s = r(s, { type: 'edit_field', field: 'node', value: 'pve2' });
+  assert.equal(s.dirty.storage, undefined);
+  assert.equal(s.dirty.vmid, '903');
+  // start errors: 410 → picker, others keep the review
+  let t = r(r(s, { type: 'starting' }), { type: 'start_failed', status: 410, error: 'проверка истекла' });
+  assert.equal(t.phase, 'pick');
+  assert.equal(t.probe, null);
+  t = r(r(s, { type: 'starting' }), { type: 'start_failed', status: 409, error: 'установка уже идёт' });
+  assert.equal(t.phase, 'review');
+  assert.equal(t.error, 'установка уже идёт');
+  // a failed (rolled back) job can be retried with the same check
+  t = r(r(s, { type: 'started', job: { id: 'j' } }), { type: 'job', job: { id: 'j', status: 'failed', error: 'откат выполнен' } });
+  assert.equal(t.phase, 'failed');
+  assert.equal(t.error, 'откат выполнен');
+  assert.equal(r(t, { type: 'retry' }).phase, 'review');
+  assert.equal(r(t, { type: 'back' }).phase, 'pick');
+  env.dispose();
+});
+
+test('selfinstall: moved screen state', async () => {
+  const env = setupEnv();
+  const { movedView } = await env.import('lib/selfinstall.js');
+  assert.equal(movedView(null).state, 'checking');
+  assert.equal(movedView({ reachable: true }).state, 'ok');
+  assert.equal(movedView({ reachable: false }).state, 'down');
+  env.dispose();
+});
+
+test('api: selfinstall endpoints and the transfer-mode 503', async () => {
+  let transfers = 0;
+  const env = setupEnv({
+    'GET /api/v1/selfinstall': () => [200, { state: 'local', transferring: false }],
+    'POST /api/v1/selfinstall/probe': () => [200, sampleProbe],
+    'POST /api/v1/selfinstall': () => [202, { job: { id: 'j1' } }],
+    'POST /api/v1/auth/handoff': (b) => (b.token === 'good' ? [204] : [401, { error: 'ссылка для входа недействительна или устарела' }]),
+    'POST /api/v1/targets/probe': () => [503, { error: 'идёт перенос Hestia на сервер' }],
+    'POST /api/v1/jobs/demo': () => [503, { error: 'Hestia работает на http://x' }],
+  });
+  const { api, onTransfer, isTransferError } = await env.import('lib/api.js');
+  onTransfer(() => transfers++);
+  assert.equal((await api.selfinstall()).state, 'local');
+  await api.probeInstall({ target_id: 1 });
+  await api.startInstall('p1');
+  assert.deepEqual(env.calls.map((c) => c.key), ['GET /api/v1/selfinstall', 'POST /api/v1/selfinstall/probe', 'POST /api/v1/selfinstall']);
+  assert.deepEqual(env.calls[2].body, { probe_id: 'p1' });
+  assert.equal(await api.handoff('good'), null);
+  await assert.rejects(api.handoff('bad'), (e) => e.status === 401);
+  await assert.rejects(api.probeTarget({}), (e) => e.status === 503);
+  assert.equal(transfers, 1);
+  await assert.rejects(api.demoJob());
+  assert.equal(transfers, 1, 'another 503 is not a transfer');
+  assert.equal(isTransferError(503, 'идёт перенос Hestia на сервер'), true);
+  assert.equal(isTransferError(500, 'идёт перенос'), false);
+  env.dispose();
+});
+
+test('jobs reducer: the final status event carries the result', async () => {
+  const env = setupEnv();
+  const { applyEvent } = await env.import('lib/jobs.js');
+  let j = applyEvent(null, 'snapshot', { id: 'a', status: 'running', steps: [], log: [] });
+  j = applyEvent(j, 'status', { status: 'done', error: '', finished_at: 'x', result: { url: 'http://h', handoff_url: 'http://h/#/handoff/t' } });
+  assert.equal(j.status, 'done');
+  assert.equal(j.result.url, 'http://h');
+  j = applyEvent(j, 'snapshot', { id: 'a', status: 'done', steps: [], log: [], result: { url: 'http://h' } });
+  assert.equal(j.result.url, 'http://h');
+  env.dispose();
+});
+
+test('session: a moved controller shows the redirect screen, handoff signs in once', async () => {
+  let moved = true, authed = false;
+  const env = setupEnv({
+    'GET /api/v1/health': () => (moved ? [200, { status: 'moved', remote: 'http://198.51.100.7', instance_id: 'i1' }] : [200, { status: 'ok', transferring: false }]),
+    'GET /api/v1/auth/me': () => (authed ? [200, { user: { id: 1, username: 'admin' } }] : [401, { error: 'нужен вход' }]),
+    'GET /api/v1/setup': () => [200, { needs_admin: false, mode: 'serve' }],
+    'POST /api/v1/auth/handoff': (b) => (b.token === 'tok' ? ((authed = true), [204]) : [401, { error: 'устарела' }]),
+  });
+  const s = await env.import('lib/session.svelte.js');
+  await s.boot();
+  assert.equal(s.session.phase, 'moved');
+  assert.equal(s.session.remote.url, 'http://198.51.100.7');
+  assert.ok(!env.calls.some((c) => c.key === 'GET /api/v1/auth/me'), 'a moved controller does not ask for the session');
+
+  moved = false;
+  assert.equal(await s.handoffLogin('wrong'), false);
+  assert.equal(s.session.phase, 'login');
+  assert.equal(await s.handoffLogin('tok'), true);
+  assert.equal(s.session.phase, 'app');
+  assert.equal(s.session.user.username, 'admin');
+  env.dispose();
+});
+
+test('transfer watch: banner stays until the server says the transfer is over', async () => {
+  const env = setupEnv();
+  const { createTransferWatch } = await env.import('lib/transfer.js');
+  const answers = [{ transferring: true }, new Error('down'), { transferring: true }, { transferring: false }];
+  const seen = [];
+  const timers = [];
+  const w = createTransferWatch(
+    async () => {
+      const a = answers.shift();
+      if (a instanceof Error) throw a;
+      return a;
+    },
+    (on) => seen.push(on),
+    { setTimer: (fn) => (timers.push(fn), timers.length), clearTimer: () => {} },
+  );
+  w.start();
+  assert.deepEqual(seen, [true]);
+  assert.equal(w.active, true);
+  w.start(); // a second start does not add a second timer
+  assert.equal(timers.length, 1);
+  for (let i = 0; i < 4; i++) {
+    const fn = timers.shift();
+    if (!fn) break;
+    await fn();
+  }
+  assert.equal(seen.at(-1), false);
+  assert.equal(w.active, false);
+  assert.ok(seen.slice(0, -1).every((v) => v === true), 'no flicker while the server is unreachable');
+  assert.equal(timers.length, 0, 'the poll stops after the transfer');
+  env.dispose();
+});

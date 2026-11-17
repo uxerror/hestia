@@ -1,7 +1,17 @@
-import { api, onUnauthorized } from './api.js';
+import { api, onUnauthorized, onTransfer } from './api.js';
+import { createTransferWatch } from './transfer.js';
 
-// phase: loading | setup | login | app
-export const session = $state({ phase: 'loading', user: null, mode: '', error: '' });
+// phase: loading | setup | login | app | moved
+// transferring: the server is copying its state to a server (writes are refused).
+// remote: where Hestia lives after it moved (phase "moved").
+export const session = $state({ phase: 'loading', user: null, mode: '', error: '', transferring: false, remote: null });
+
+const watch = createTransferWatch(
+  () => api.health(),
+  (on) => (session.transferring = on),
+);
+onTransfer(() => watch.start());
+export const startTransferWatch = () => watch.start();
 
 async function route401() {
   session.user = null;
@@ -20,6 +30,18 @@ onUnauthorized(() => {
 
 export async function boot() {
   session.error = '';
+  // The health endpoint needs no login: it tells whether this controller moved.
+  try {
+    const h = await api.health();
+    if (h.status === 'moved') {
+      session.remote = { url: h.remote, instance_id: h.instance_id };
+      session.phase = 'moved';
+      return;
+    }
+    if (h.transferring) watch.start();
+  } catch {
+    // unreachable or an old server: the usual checks below report it
+  }
   try {
     const me = await api.me();
     session.user = me.user;
@@ -30,6 +52,20 @@ export async function boot() {
     if (!e.status) session.error = e.message;
   }
   await route401();
+}
+
+// Sign in with the one-time token of #/handoff/<token> (the state was moved to
+// this server together with the token). An invalid token ends at the login screen.
+export async function handoffLogin(token) {
+  session.error = '';
+  try {
+    await api.handoff(token);
+  } catch {
+    await boot();
+    return false;
+  }
+  await boot();
+  return session.phase === 'app';
 }
 
 export async function login(username, password) {

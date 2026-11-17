@@ -80,6 +80,7 @@ type NodeStorageEntry struct {
 	Shared  int    `json:"shared"`
 	Total   int64  `json:"total"`
 	Used    int64  `json:"used"`
+	Avail   int64  `json:"avail"`
 }
 
 // Iface is a network interface of a guest. LXC reports Inet/Inet6 ("addr/prefix"),

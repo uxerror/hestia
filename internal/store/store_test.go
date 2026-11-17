@@ -18,7 +18,7 @@ func TestOpenMigrationsIdempotentAndPerms(t *testing.T) {
 	if err != nil || v != len(migrations) {
 		t.Fatalf("version = %d, %v", v, err)
 	}
-	for _, tbl := range []string{"users", "sessions", "jobs", "job_steps", "job_log", "schema_migrations", "secrets", "targets", "target_nodes", "inventory"} {
+	for _, tbl := range []string{"users", "sessions", "jobs", "job_steps", "job_log", "schema_migrations", "secrets", "targets", "target_nodes", "inventory", "settings", "handoff_tokens"} {
 		var n int
 		if err := s.db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?`, tbl).Scan(&n); err != nil || n != 1 {
 			t.Errorf("table %s missing (%v)", tbl, err)
@@ -89,5 +89,138 @@ func TestSessions(t *testing.T) {
 	_ = s.DeleteSession(ctx, "hash1")
 	if _, err := s.UserBySession(ctx, "hash1", now); err != ErrNotFound {
 		t.Fatalf("deleted: %v", err)
+	}
+}
+
+func TestSettingsAndInstanceID(t *testing.T) {
+	s, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	if _, err := s.GetSetting(ctx, "x"); err != ErrNotFound {
+		t.Fatalf("missing setting: %v", err)
+	}
+	if err := s.SetSetting(ctx, "x", "1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetSetting(ctx, "x", "2"); err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := s.GetSetting(ctx, "x"); v != "2" {
+		t.Fatalf("setting = %q", v)
+	}
+	a, err := s.EnsureInstanceID(ctx)
+	if err != nil || len(a) != 32 {
+		t.Fatalf("instance id %q %v", a, err)
+	}
+	if b, _ := s.EnsureInstanceID(ctx); b != a {
+		t.Fatal("instance id must be stable")
+	}
+}
+
+func TestHandoffTokens(t *testing.T) {
+	s, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	u, _ := s.CreateFirstUser(ctx, "admin", "h")
+	now := time.Now()
+	if err := s.CreateHandoff(ctx, "h1", u.ID, now.Add(10*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateHandoff(ctx, "old", u.ID, now.Add(-time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ConsumeHandoff(ctx, "old", now); err != ErrNotFound {
+		t.Fatalf("expired token: %v", err)
+	}
+	if _, err := s.ConsumeHandoff(ctx, "nope", now); err != ErrNotFound {
+		t.Fatalf("unknown token: %v", err)
+	}
+	if uid, err := s.ConsumeHandoff(ctx, "h1", now); err != nil || uid != u.ID {
+		t.Fatalf("%d %v", uid, err)
+	}
+	if _, err := s.ConsumeHandoff(ctx, "h1", now); err != ErrNotFound {
+		t.Fatalf("a token must work once: %v", err)
+	}
+	_ = s.CreateHandoff(ctx, "h2", u.ID, now.Add(time.Minute))
+	if _, err := s.ConsumeHandoff(ctx, "h2", now.Add(2*time.Minute)); err != ErrNotFound {
+		t.Fatalf("token past its TTL: %v", err)
+	}
+}
+
+func TestSnapshotCopyAndArchive(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if _, err := s.CreateFirstUser(ctx, "admin", "h"); err != nil {
+		t.Fatal(err)
+	}
+	id, _ := s.EnsureInstanceID(ctx)
+	tmp := filepath.Join(dir, "tmp-snap")
+	path, err := s.SnapshotTo(ctx, tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := os.Stat(path); st.Mode().Perm() != 0o600 {
+		t.Fatalf("snapshot mode %v", st.Mode())
+	}
+	cp, err := OpenCopy(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := cp.EnsureInstanceID(ctx); got != id {
+		t.Fatalf("copy has another instance id: %q", got)
+	}
+	if n, _ := cp.CountUsers(ctx); n != 1 {
+		t.Fatal("copy lost users")
+	}
+	_ = cp.SetSetting(ctx, "k", "v")
+	if err := cp.Close(); err != nil {
+		t.Fatal(err)
+	}
+	entries, _ := os.ReadDir(tmp)
+	if len(entries) != 1 || entries[0].Name() != "hestia.db" {
+		t.Fatalf("the copy must be one file: %v", entries)
+	}
+	if _, err := s.GetSetting(ctx, "k"); err != ErrNotFound {
+		t.Fatal("editing the copy changed the original")
+	}
+
+	// Archive: files move, the store stays closed (no database is re-created).
+	arch := filepath.Join(dir, "archive", "t1")
+	if err := s.Archive(ctx, dir, arch); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "hestia.db")); !os.IsNotExist(err) {
+		t.Fatal("database left in the data directory")
+	}
+	if st, err := os.Stat(filepath.Join(arch, "hestia.db")); err != nil || st.Size() == 0 {
+		t.Fatalf("archived db: %v", err)
+	}
+	if st, _ := os.Stat(arch); st.Mode().Perm() != 0o700 {
+		t.Fatalf("archive mode %v", st.Mode())
+	}
+	if _, err := s.CountUsers(ctx); err == nil {
+		t.Fatal("a store used after Archive must fail, not reopen the path")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "hestia.db")); !os.IsNotExist(err) {
+		t.Fatal("a database was re-created after Archive")
+	}
+	// the archived database opens again
+	re, err := OpenCopy(arch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer re.Close()
+	if n, _ := re.CountUsers(ctx); n != 1 {
+		t.Fatal("archived database lost data")
 	}
 }

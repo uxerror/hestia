@@ -27,7 +27,9 @@ type credentials struct {
 }
 
 func (s *server) health(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "version": s.Version})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status": "ok", "version": s.Version, "instance_id": s.InstanceID, "transferring": s.Gate.Transferring(),
+	})
 }
 
 func (s *server) setupStatus(w http.ResponseWriter, r *http.Request) {
@@ -75,6 +77,26 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handoff signs in with the one-time token that came with the moved database.
+func (s *server) handoff(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Token string `json:"token"`
+	}
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	tok, err := s.Auth.Handoff(r.Context(), body.Token)
+	switch {
+	case errors.Is(err, auth.ErrBadHandoff):
+		writeError(w, http.StatusUnauthorized, err.Error())
+	case err != nil:
+		s.internal(w, r, err)
+	default:
+		auth.SetCookie(w, r, tok)
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
 func (s *server) logout(w http.ResponseWriter, r *http.Request) {
 	if err := s.Auth.Logout(r.Context(), auth.TokenFromRequest(r)); err != nil {
 		s.internal(w, r, err)
@@ -107,7 +129,21 @@ func (s *server) getJob(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"job": j})
+	writeJSON(w, http.StatusOK, map[string]any{"job": s.jobView(j)})
+}
+
+// jobDTO is a job plus the in-memory result its body reported (if any).
+type jobDTO struct {
+	store.Job
+	Result any `json:"result,omitempty"`
+}
+
+func (s *server) jobView(j store.Job) jobDTO {
+	d := jobDTO{Job: j}
+	if j.Status == store.JobDone {
+		d.Result = s.Runner.Result(j.ID)
+	}
+	return d
 }
 
 func (s *server) demoJob(w http.ResponseWriter, r *http.Request) {
@@ -147,7 +183,7 @@ func (s *server) jobEvents(w http.ResponseWriter, r *http.Request) {
 	h.Set("Cache-Control", "no-cache")
 	h.Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
-	if err := sendEvent(w, fl, "snapshot", j); err != nil || store.IsFinal(j.Status) {
+	if err := sendEvent(w, fl, "snapshot", s.jobView(j)); err != nil || store.IsFinal(j.Status) {
 		return
 	}
 
@@ -167,7 +203,7 @@ func (s *server) jobEvents(w http.ResponseWriter, r *http.Request) {
 				// Dropped as a slow consumer: resend the state and end;
 				// EventSource will reconnect.
 				if j, err := s.Store.GetJob(r.Context(), id); err == nil {
-					_ = sendEvent(w, fl, "snapshot", j)
+					_ = sendEvent(w, fl, "snapshot", s.jobView(j))
 				}
 				return
 			}

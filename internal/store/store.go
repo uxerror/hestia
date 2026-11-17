@@ -155,6 +155,17 @@ CREATE TABLE inventory (
 	error        TEXT NOT NULL DEFAULT ''
 );
 `},
+	{5, `
+CREATE TABLE IF NOT EXISTS settings (
+	key   TEXT PRIMARY KEY,
+	value TEXT NOT NULL
+);
+CREATE TABLE handoff_tokens (
+	hash       TEXT PRIMARY KEY,
+	user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	expires_at INTEGER NOT NULL
+);
+`},
 }
 
 // SchemaVersion returns the highest applied migration number.

@@ -27,7 +27,14 @@ type Runner struct {
 	ctx   context.Context
 	stop  context.CancelFunc
 	wg    sync.WaitGroup
+
+	rmu     sync.Mutex
+	results map[string]any // in-memory job results (may hold one-time secrets)
+	resIDs  []string
 }
+
+// maxResults bounds how many finished jobs keep their in-memory result.
+const maxResults = 20
 
 // NewRunner creates a Runner and marks jobs left unfinished by a previous
 // process as failed.
@@ -36,7 +43,7 @@ func NewRunner(ctx context.Context, s *store.Store) (*Runner, error) {
 		return nil, err
 	}
 	rctx, stop := context.WithCancel(ctx)
-	return &Runner{store: s, hub: NewHub(), ctx: rctx, stop: stop}, nil
+	return &Runner{store: s, hub: NewHub(), ctx: rctx, stop: stop, results: map[string]any{}}, nil
 }
 
 // Hub returns the event hub.
@@ -98,6 +105,27 @@ func (r *Runner) run(j store.Job, fn Func) {
 	r.publishStatus(j.ID, status, msg, &finished)
 }
 
+// Result returns the in-memory result a job reported with Run.SetResult, or
+// nil. Results are never written to the database.
+func (r *Runner) Result(id string) any {
+	r.rmu.Lock()
+	defer r.rmu.Unlock()
+	return r.results[id]
+}
+
+func (r *Runner) setResult(id string, v any) {
+	r.rmu.Lock()
+	defer r.rmu.Unlock()
+	if _, ok := r.results[id]; !ok {
+		r.resIDs = append(r.resIDs, id)
+		for len(r.resIDs) > maxResults {
+			delete(r.results, r.resIDs[0])
+			r.resIDs = r.resIDs[1:]
+		}
+	}
+	r.results[id] = v
+}
+
 func safeCall(ctx context.Context, run *Run, fn Func) (err error) {
 	defer func() {
 		if p := recover(); p != nil {
@@ -108,7 +136,11 @@ func safeCall(ctx context.Context, run *Run, fn Func) (err error) {
 }
 
 func (r *Runner) publishStatus(id, status, errMsg string, finished *time.Time) {
-	r.hub.Publish(id, Event{Type: "status", Data: StatusEvent{Status: status, Error: errMsg, FinishedAt: finished}})
+	ev := StatusEvent{Status: status, Error: errMsg, FinishedAt: finished}
+	if status == store.JobDone {
+		ev.Result = r.Result(id)
+	}
+	r.hub.Publish(id, Event{Type: "status", Data: ev})
 }
 
 // StatusEvent is the data of a "status" event.
@@ -116,6 +148,8 @@ type StatusEvent struct {
 	Status     string     `json:"status"`
 	Error      string     `json:"error"`
 	FinishedAt *time.Time `json:"finished_at"`
+	// Result is what a successful job reported with Run.SetResult.
+	Result any `json:"result,omitempty"`
 }
 
 // StepEvent is the data of a "step" event.
@@ -135,6 +169,10 @@ type Run struct {
 	next    int
 	stepErr error
 }
+
+// SetResult stores the job's result in memory; it is sent with the final
+// "status" event and never persisted.
+func (r *Run) SetResult(v any) { r.runner.setResult(r.jobID, v) }
 
 // ID returns the job id.
 func (r *Run) ID() string { return r.jobID }

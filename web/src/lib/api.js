@@ -12,6 +12,16 @@ export function onUnauthorized(fn) {
   unauthorizedHandler = fn;
 }
 
+let transferHandler = null;
+export function onTransfer(fn) {
+  transferHandler = fn;
+}
+
+// The server refuses writes while it copies its state to a server (503).
+export function isTransferError(status, message) {
+  return status === 503 && /идёт перенос/.test(message || '');
+}
+
 export async function request(method, path, body, { skip401 = false } = {}) {
   const init = { method, credentials: 'same-origin', headers: { Accept: 'application/json' } };
   if (body !== undefined) {
@@ -35,12 +45,15 @@ export async function request(method, path, body, { skip401 = false } = {}) {
   if (!res.ok) {
     const msg = (data && data.error) || `Ошибка сервера (${res.status})`;
     if (res.status === 401 && !skip401 && unauthorizedHandler) unauthorizedHandler();
+    if (isTransferError(res.status, msg) && transferHandler) transferHandler();
     throw new ApiError(res.status, msg);
   }
   return data;
 }
 
 export const api = {
+  health: () => request('GET', '/health'),
+  remote: () => request('GET', '/remote'),
   setup: () => request('GET', '/setup'),
   setupAdmin: (username, password) => request('POST', '/setup/admin', { username, password }),
   // 401 on login means wrong credentials, not an expired session.
@@ -60,5 +73,10 @@ export const api = {
   refreshInventory: (id) => request('POST', '/inventory/' + encodeURIComponent(id) + '/refresh'),
   rolePlan: (id) => request('GET', '/inventory/' + encodeURIComponent(id) + '/role-fix'),
   fixRole: (id) => request('POST', '/inventory/' + encodeURIComponent(id) + '/role-fix', { confirm: true }),
+  selfinstall: () => request('GET', '/selfinstall'),
+  probeInstall: (body) => request('POST', '/selfinstall/probe', body),
+  startInstall: (probeId) => request('POST', '/selfinstall', { probe_id: probeId }),
+  // 401 = unknown/used/expired token, not an expired session.
+  handoff: (token) => request('POST', '/auth/handoff', { token }, { skip401: true }),
   deleteTarget: (id, revert) => request('DELETE', '/targets/' + encodeURIComponent(id) + '?revert=' + (revert ? 'true' : 'false')),
 };

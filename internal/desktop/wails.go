@@ -25,8 +25,9 @@ const Available = true
 // not work: WebKitGTK drops Set-Cookie on custom-scheme responses, so every
 // request after login came back 401. Over loopback HTTP the session cookie,
 // SSE and later the switch to a remote controller (just another URL) behave
-// exactly as in a browser. It returns the process exit code.
-func Run(h http.Handler, title string) int {
+// exactly as in a browser. A non-empty startURL (the remote controller) is
+// opened instead of the local page. It returns the process exit code.
+func Run(h http.Handler, title, startURL string) int {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "не удалось открыть локальный порт:", err)
@@ -45,6 +46,10 @@ func Run(h http.Handler, title string) int {
 	}()
 	url := "http://" + ln.Addr().String() + "/"
 	slog.Info("desktop", "url", url)
+	if startURL != "" {
+		// The controller moved to a server: open it directly.
+		url = startURL
+	}
 
 	app := application.New(application.Options{
 		Name:        "Hestia",

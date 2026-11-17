@@ -12,7 +12,7 @@ import (
 const Available = false
 
 // Run is the stub used when built without -tags desktop.
-func Run(_ http.Handler, _ string) int {
+func Run(_ http.Handler, _, _ string) int {
 	fmt.Fprintln(os.Stderr, "собрано без desktop")
 	return 2
 }

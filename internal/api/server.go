@@ -15,6 +15,7 @@ import (
 	"hestia/internal/jobs"
 	"hestia/internal/onboard"
 	"hestia/internal/secrets"
+	"hestia/internal/selfinstall"
 	"hestia/internal/store"
 )
 
@@ -28,9 +29,14 @@ type Config struct {
 	Inventory *inventory.Service
 	// Identity is the controller's SSH identity (public part is exposed).
 	Identity secrets.Identity
-	Web      fs.FS  // built frontend rooted at index.html
-	Mode     string // "serve" or "desktop"
-	Version  string
+	// Selfinstall moves the controller to a server; Gate carries the
+	// transfer/moved modes (both optional in tests).
+	Selfinstall *selfinstall.Service
+	Gate        *selfinstall.Gate
+	InstanceID  string
+	Web         fs.FS  // built frontend rooted at index.html
+	Mode        string // "serve" or "desktop"
+	Version     string
 }
 
 type server struct {
@@ -39,6 +45,9 @@ type server struct {
 
 // New returns the full handler (API + SPA) shared by serve and desktop.
 func New(cfg Config) http.Handler {
+	if cfg.Gate == nil {
+		cfg.Gate = &selfinstall.Gate{}
+	}
 	s := &server{cfg}
 	mux := http.NewServeMux()
 
@@ -46,6 +55,7 @@ func New(cfg Config) http.Handler {
 	mux.HandleFunc("GET /api/v1/setup", s.setupStatus)
 	mux.HandleFunc("POST /api/v1/setup/admin", s.setupAdmin)
 	mux.HandleFunc("POST /api/v1/auth/login", s.login)
+	mux.HandleFunc("POST /api/v1/auth/handoff", s.handoff)
 
 	mux.HandleFunc("POST /api/v1/auth/logout", s.requireAuth(s.logout))
 	mux.HandleFunc("GET /api/v1/auth/me", s.requireAuth(s.me))
@@ -68,12 +78,42 @@ func New(cfg Config) http.Handler {
 	mux.HandleFunc("GET /api/v1/inventory/{id}/role-fix", s.requireAuth(s.rolePlan))
 	mux.HandleFunc("POST /api/v1/inventory/{id}/role-fix", s.requireAuth(s.fixRole))
 
+	if cfg.Selfinstall != nil {
+		mux.HandleFunc("GET /api/v1/selfinstall", s.requireAuth(s.selfinstallState))
+		mux.HandleFunc("POST /api/v1/selfinstall/probe", s.requireAuth(s.selfinstallProbe))
+		mux.HandleFunc("POST /api/v1/selfinstall", s.requireAuth(s.selfinstallStart))
+	}
+
 	// Unknown API paths must not fall through to the SPA.
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "не найдено")
 	})
 	mux.Handle("/", spaHandler(cfg.Web))
-	return recoverMiddleware(mux)
+	moved := newMovedHandler(cfg.Gate, cfg.Web, cfg.Version)
+	return recoverMiddleware(modeMiddleware(cfg.Gate, moved, mux))
+}
+
+// modeMiddleware implements the two process modes: after the controller
+// moved, only the "moved" screen is served; while the state is being copied,
+// requests that change anything are refused (login and logout still work).
+func modeMiddleware(g *selfinstall.Gate, moved, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if g.Moved() != nil {
+			moved.ServeHTTP(w, r)
+			return
+		}
+		if g.Transferring() {
+			switch r.Method {
+			case http.MethodGet, http.MethodHead, http.MethodOptions:
+			default:
+				if !strings.HasPrefix(r.URL.Path, "/api/v1/auth/") {
+					writeError(w, http.StatusServiceUnavailable, "идёт перенос Hestia на сервер")
+					return
+				}
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func recoverMiddleware(next http.Handler) http.Handler {

@@ -2,7 +2,9 @@ package jobs
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -138,5 +140,57 @@ func TestHubDropsSlowSubscriber(t *testing.T) {
 	}
 	if n != subBuffer {
 		t.Fatalf("got %d events", n)
+	}
+}
+
+func TestResultIsSentWithFinalStatusAndKeptInMemory(t *testing.T) {
+	s := newStore(t)
+	r, err := NewRunner(context.Background(), s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gate := make(chan struct{})
+	var id string
+	j, err := r.Start("t", "T", func(ctx context.Context, run *Run) error {
+		id = run.ID()
+		<-gate
+		run.SetResult(map[string]string{"url": "http://x", "token": "once"})
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ch, cancel := r.Hub().Subscribe(j.ID)
+	defer cancel()
+	close(gate)
+	var final StatusEvent
+	for ev := range ch {
+		if se, ok := ev.Data.(StatusEvent); ok && store.IsFinal(se.Status) {
+			final = se
+			break
+		}
+	}
+	r.Wait()
+	res, ok := final.Result.(map[string]string)
+	if !ok || res["url"] != "http://x" {
+		t.Fatalf("final event result: %#v", final.Result)
+	}
+	if r.Result(id) == nil {
+		t.Fatal("result must stay available in memory")
+	}
+	// never persisted
+	got, _ := s.GetJob(context.Background(), j.ID)
+	b, _ := json.Marshal(got)
+	if strings.Contains(string(b), "once") {
+		t.Fatalf("result leaked into the stored job: %s", b)
+	}
+	// a failed job reports no result
+	j2, _ := r.Start("t", "F", func(ctx context.Context, run *Run) error {
+		run.SetResult("x")
+		return errors.New("boom")
+	})
+	r.Wait()
+	if r.Result(j2.ID) == nil {
+		t.Log("result kept for failed jobs too (in memory only)")
 	}
 }

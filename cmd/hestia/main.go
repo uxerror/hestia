@@ -22,6 +22,7 @@ import (
 	"hestia/internal/jobs"
 	"hestia/internal/onboard"
 	"hestia/internal/secrets"
+	"hestia/internal/selfinstall"
 	"hestia/internal/store"
 	"hestia/web"
 )
@@ -59,6 +60,9 @@ func usage() {
 
   serve    [--listen :8080] [--data ./data]       HTTP-сервер (API + веб-интерфейс)
   desktop  [--data ~/.local/share/hestia]         окно приложения
+
+Если в каталоге данных есть remote.json, Hestia уже перенесена на сервер: база не
+открывается, показывается экран «Hestia работает на <адрес>».
   version                                         версия
 `)
 }
@@ -70,9 +74,14 @@ type app struct {
 	handler http.Handler
 	stopInv context.CancelFunc
 	inv     *inventory.Service
+	gate    *selfinstall.Gate
+	remote  *selfinstall.Remote // set when started in "moved" mode (no database)
 }
 
 func (a *app) close() {
+	if a.store == nil { // moved mode: nothing was opened
+		return
+	}
 	a.stopInv()
 	a.inv.Wait()
 	a.runner.Shutdown()
@@ -81,6 +90,16 @@ func (a *app) close() {
 
 // newApp builds the handler used by both serve and desktop.
 func newApp(ctx context.Context, dataDir, mode string) (*app, error) {
+	// A moved controller never touches its (archived) database.
+	rem, err := selfinstall.ReadRemote(dataDir)
+	if err != nil {
+		return nil, err
+	}
+	if rem != nil {
+		gate := &selfinstall.Gate{}
+		gate.SetMoved(*rem)
+		return &app{handler: api.NewMoved(gate, web.Dist(), version), gate: gate, remote: rem}, nil
+	}
 	st, err := store.Open(dataDir)
 	if err != nil {
 		return nil, fmt.Errorf("база данных: %w", err)
@@ -106,16 +125,28 @@ func newApp(ctx context.Context, dataDir, mode string) (*app, error) {
 		_ = st.Close()
 		return nil, fmt.Errorf("SSH-ключ Hestia: %w", err)
 	}
+	instanceID, err := st.EnsureInstanceID(ctx)
+	if err != nil {
+		runner.Shutdown()
+		_ = st.Close()
+		return nil, fmt.Errorf("идентификатор экземпляра: %w", err)
+	}
 	ob := (&onboard.Service{Store: st, Secrets: sec, Runner: runner, Identity: id}).Init()
 	inv := (&inventory.Service{Store: st, Secrets: sec, Runner: runner, Identity: id}).Init()
 	ob.AfterChange = inv.RefreshQuiet
 	invCtx, stopInv := context.WithCancel(ctx)
 	inv.Start(invCtx)
+	gate := &selfinstall.Gate{}
+	si := (&selfinstall.Service{
+		Store: st, Secrets: sec, Runner: runner, Identity: id, Gate: gate, DataDir: dataDir, Version: version,
+		OnSwitched: stopInv,
+	}).Init()
 	h := api.New(api.Config{
 		Store: st, Auth: auth.New(st), Runner: runner, Onboard: ob, Inventory: inv, Identity: id,
+		Selfinstall: si, Gate: gate, InstanceID: instanceID,
 		Web: web.Dist(), Mode: mode, Version: version,
 	})
-	return &app{store: st, runner: runner, handler: h, stopInv: stopInv, inv: inv}, nil
+	return &app{store: st, runner: runner, handler: h, stopInv: stopInv, inv: inv, gate: gate}, nil
 }
 
 func cmdServe(args []string) int {
@@ -168,7 +199,7 @@ func cmdDesktop(args []string) int {
 		return 2
 	}
 	if !desktop.Available {
-		return desktop.Run(nil, "") // prints the stub message, exit code 2
+		return desktop.Run(nil, "", "") // prints the stub message, exit code 2
 	}
 	a, err := newApp(context.Background(), *data, "desktop")
 	if err != nil {
@@ -176,7 +207,17 @@ func cmdDesktop(args []string) int {
 		return 1
 	}
 	defer a.close()
-	return desktop.Run(a.handler, "Hestia")
+	start := ""
+	if a.remote != nil {
+		// Moved: open the remote controller directly if it answers; otherwise
+		// the window shows the local "moved" screen, which can retry.
+		ctx, cancel := context.WithTimeout(context.Background(), selfinstall.CheckTimeout+time.Second)
+		if selfinstall.CheckRemote(ctx, *a.remote) {
+			start = a.remote.URL
+		}
+		cancel()
+	}
+	return desktop.Run(a.handler, "Hestia", start)
 }
 
 func defaultDesktopData() string {

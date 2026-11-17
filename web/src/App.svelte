@@ -1,5 +1,5 @@
 <script>
-  import { session, boot, logout } from './lib/session.svelte.js';
+  import { session, boot, logout, handoffLogin } from './lib/session.svelte.js';
   import { parseHash } from './lib/router.js';
   import SetupAdmin from './pages/SetupAdmin.svelte';
   import Login from './pages/Login.svelte';
@@ -10,13 +10,23 @@
   import Connect from './pages/Connect.svelte';
   import Targets from './pages/Targets.svelte';
   import Guests from './pages/Guests.svelte';
+  import Install from './pages/Install.svelte';
+  import Moved from './pages/Moved.svelte';
   import { Flame, LogOut, User } from 'lucide-svelte';
 
   let route = $state(parseHash(location.hash));
   let loggingOut = $state(false);
 
   $effect(() => {
-    boot();
+    const r = parseHash(location.hash);
+    if (r.name === 'handoff') {
+      // The one-time token must not stay in the address bar or the history.
+      history.replaceState(null, '', location.pathname + location.search + '#/targets');
+      route = parseHash(location.hash);
+      handoffLogin(r.token);
+    } else {
+      boot();
+    }
     const h = () => (route = parseHash(location.hash));
     window.addEventListener('hashchange', h);
     return () => window.removeEventListener('hashchange', h);
@@ -28,7 +38,7 @@
     loggingOut = false;
   }
   const section = $derived(
-    route.name === 'jobs' || route.name === 'job' ? 'jobs' : route.name === 'targets' || route.name === 'guests' ? 'targets' : 'wizard',
+    route.name === 'jobs' || route.name === 'job' ? 'jobs' : route.name === 'targets' || route.name === 'guests' || route.name === 'install' ? 'targets' : 'wizard',
   );
 </script>
 
@@ -41,6 +51,8 @@
       <span class="loading loading-spinner loading-lg"></span>
     {/if}
   </div>
+{:else if session.phase === 'moved'}
+  <Moved />
 {:else if session.phase === 'setup'}
   <SetupAdmin />
 {:else if session.phase === 'login'}
@@ -64,10 +76,16 @@
         </button>
       </div>
     </div>
+    {#if session.transferring}
+      <div class="alert alert-warning rounded-none justify-center text-sm" role="status" data-testid="transfer-banner">
+        <span class="loading loading-spinner loading-xs"></span> Идёт перенос Hestia на сервер — изменения временно заблокированы.
+      </div>
+    {/if}
     <main class="flex-1 p-4 sm:p-6 max-w-6xl w-full mx-auto">
       {#if route.name === 'jobs'}<Jobs />
       {:else if route.name === 'job'}<JobDetail id={route.id} />
       {:else if route.name === 'targets'}<Targets />
+      {:else if route.name === 'install'}<Install />
       {:else if route.name === 'guests'}{#key route.id}<Guests id={route.id} node={route.node} />{/key}
       {:else if route.name === 'connect'}{#key route.kind}<Connect kind={route.kind} />{/key}
       {:else if route.name === 'next'}<Stub />
