@@ -170,7 +170,7 @@ func TestInspectRealOutputs(t *testing.T) {
 	if st.RoleExists || st.UserExists || st.TokenExist || st.ACLExists || len(st.RolePrivs) != 0 {
 		t.Fatalf("false positives: %+v", st)
 	}
-	if got := st.MissingPrivs(); len(got) != len(proxmox.Privileges) {
+	if got := st.MissingPrivs(); len(got) != len(proxmox.PrivilegesFor(st.Version)) {
 		t.Fatalf("missing privs: %v", got)
 	}
 }

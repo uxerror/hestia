@@ -100,3 +100,33 @@ func TestParseMembers(t *testing.T) {
 		t.Fatal(cl, nodes)
 	}
 }
+
+func TestAPIErrorCarriesStatusAndServerMessage(t *testing.T) {
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api2/json/cluster/status":
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"data":null,"message":"Permission check failed (/, Sys.Audit)\n"}`))
+		default:
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`{"data":null,"message":"QEMU guest agent is not running\n"}`))
+		}
+	}))
+	srv.EnableHTTP2 = false
+	srv.StartTLS()
+	defer srv.Close()
+	h, p, _ := net.SplitHostPort(srv.Listener.Addr().String())
+	port, _ := strconv.Atoi(p)
+	fp, _ := proxmox.FetchCertFP(context.Background(), h, port)
+	c := proxmox.NewClient(proxmox.ClientConfig{Host: h, Port: port, TokenID: proxmox.TokenID, Secret: "s3cr3t", PinFP: fp})
+
+	_, err := c.AgentInterfaces(context.Background(), "pve", 101)
+	var ae *proxmox.APIError
+	if !errors.As(err, &ae) || ae.Status != 500 || ae.Detail != "QEMU guest agent is not running" {
+		t.Fatalf("%#v", err)
+	}
+	_, err = c.ClusterStatus(context.Background())
+	if !errors.As(err, &ae) || ae.Status != 403 || !strings.Contains(err.Error(), "отклонил токен") || strings.Contains(err.Error(), "s3cr3t") {
+		t.Fatalf("%v", err)
+	}
+}

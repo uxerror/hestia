@@ -240,7 +240,7 @@ func proxmoxPlan(st proxmox.State, keyPath string, keyPresent bool) []PlanItem {
 	switch {
 	case !st.RoleExists:
 		plan = append(plan, PlanItem{"role", "Создать роль " + proxmox.RoleName,
-			"Минимальные права: " + strings.Join(proxmox.Privileges, ", ")})
+			"Минимальные права: " + strings.Join(proxmox.PrivilegesFor(st.Version), ", ")})
 	case len(st.MissingPrivs()) > 0:
 		plan = append(plan, PlanItem{"role", "Дополнить роль " + proxmox.RoleName,
 			"Роль уже есть, добавим недостающие права: " + strings.Join(st.MissingPrivs(), ", ")})

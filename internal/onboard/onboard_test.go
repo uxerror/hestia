@@ -148,7 +148,7 @@ func TestConnectProxmoxClusterEndToEnd(t *testing.T) {
 		t.Fatalf("job %s: %s\n%s", j.Status, j.Error, e.jobText(j))
 	}
 	// State on Proxmox.
-	if got := host.roles[proxmox.RoleName]; got != sortedPrivs(strings.Join(proxmox.Privileges, ",")) {
+	if got := host.roles[proxmox.RoleName]; got != sortedPrivs(strings.Join(proxmox.PrivilegesFor("8.2.4"), ",")) {
 		t.Fatalf("role privs: %s", got)
 	}
 	if !host.users[proxmox.UserID] || !host.acl["/|hestia@pve|Hestia"] || host.tokens["hestia"] != tokenValue {

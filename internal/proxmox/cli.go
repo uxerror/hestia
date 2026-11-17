@@ -25,11 +25,44 @@ const (
 	Comment   = "Hestia controller"
 )
 
-// Privileges is the minimal privilege set of the Hestia role.
+// Privileges is the version-independent part of the Hestia role's privileges;
+// see PrivilegesFor for the full set on a given Proxmox version.
 var Privileges = []string{
 	"Sys.Audit", "Datastore.Audit", "Datastore.AllocateSpace", "Datastore.AllocateTemplate",
 	"VM.Audit", "VM.Allocate", "VM.Clone", "VM.Config.Disk", "VM.Config.CPU", "VM.Config.Memory",
 	"VM.Config.Network", "VM.Config.Options", "VM.PowerMgmt", "SDN.Use", "Pool.Audit",
+}
+
+// GuestAgentPriv is the privilege that lets the API read data from the QEMU
+// guest agent on Proxmox VE 9 and newer.
+const GuestAgentPriv = "VM.GuestAgent.Audit"
+
+// legacyGuestAgentPriv guards the guest agent API on Proxmox VE 8 and older
+// (VM.GuestAgent.Audit does not exist there, so the role must not name it).
+const legacyGuestAgentPriv = "VM.Monitor"
+
+// majorVersion parses the leading number of a version like "9.2.10".
+func majorVersion(v string) int {
+	n := 0
+	for _, c := range v {
+		if c < '0' || c > '9' {
+			break
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n
+}
+
+// PrivilegesFor returns the privileges Hestia's role needs on the given
+// Proxmox VE version: the base set plus the one that opens the guest agent
+// API (VM.GuestAgent.Audit on 9+, VM.Monitor before; an unknown version is
+// treated as current).
+func PrivilegesFor(version string) []string {
+	out := append([]string(nil), Privileges...)
+	if m := majorVersion(version); m == 0 || m >= 9 {
+		return append(out, GuestAgentPriv)
+	}
+	return append(out, legacyGuestAgentPriv)
 }
 
 // ErrNotProxmox means pveversion is missing on the host.
@@ -222,7 +255,7 @@ func (s State) MissingPrivs() []string {
 		have[p] = true
 	}
 	var miss []string
-	for _, p := range Privileges {
+	for _, p := range PrivilegesFor(s.Version) {
 		if !have[p] {
 			miss = append(miss, p)
 		}
@@ -230,9 +263,9 @@ func (s State) MissingPrivs() []string {
 	return miss
 }
 
-func privString(extra []string) string {
+func privString(version string, extra []string) string {
 	set := map[string]bool{}
-	for _, p := range Privileges {
+	for _, p := range PrivilegesFor(version) {
 		set[p] = true
 	}
 	for _, p := range extra {
@@ -249,14 +282,13 @@ func privString(extra []string) string {
 // Commands used for changes (also by revert). They are plain strings so the
 // order and content are easy to review.
 var (
-	CmdUserAdd    = "pveum user add " + UserID + " --comment " + target.Quote(Comment)
-	CmdUserDel    = "pveum user delete " + UserID
-	CmdACLAdd     = "pveum acl modify / --users " + UserID + " --roles " + RoleName
-	CmdACLDel     = "pveum acl delete / --users " + UserID + " --roles " + RoleName
-	CmdTokenAdd   = "pveum user token add " + UserID + " " + TokenName + " --privsep 0 --output-format json"
-	CmdTokenDel   = "pveum user token remove " + UserID + " " + TokenName
-	CmdRoleDel    = "pveum role delete " + RoleName
-	CmdRoleCreate = "pveum role add " + RoleName + " --privs " + target.Quote(strings.Join(sortedCopy(Privileges), ","))
+	CmdUserAdd  = "pveum user add " + UserID + " --comment " + target.Quote(Comment)
+	CmdUserDel  = "pveum user delete " + UserID
+	CmdACLAdd   = "pveum acl modify / --users " + UserID + " --roles " + RoleName
+	CmdACLDel   = "pveum acl delete / --users " + UserID + " --roles " + RoleName
+	CmdTokenAdd = "pveum user token add " + UserID + " " + TokenName + " --privsep 0 --output-format json"
+	CmdTokenDel = "pveum user token remove " + UserID + " " + TokenName
+	CmdRoleDel  = "pveum role delete " + RoleName
 )
 
 func sortedCopy(in []string) []string {
@@ -265,10 +297,15 @@ func sortedCopy(in []string) []string {
 	return out
 }
 
-// CmdRoleModify sets the role to the required privileges plus keep (extra
-// privileges that were already granted and must not be removed).
-func CmdRoleModify(keep []string) string {
-	return "pveum role modify " + RoleName + " --privs " + target.Quote(privString(keep))
+// CmdRoleCreate creates the role with the privileges required on version.
+func CmdRoleCreate(version string) string {
+	return "pveum role add " + RoleName + " --privs " + target.Quote(privString(version, nil))
+}
+
+// CmdRoleModify sets the role to the privileges required on version plus keep
+// (extra privileges that were already granted and must not be removed).
+func CmdRoleModify(version string, keep []string) string {
+	return "pveum role modify " + RoleName + " --privs " + target.Quote(privString(version, keep))
 }
 
 // CmdRoleRestore sets the role to exactly privs (used by rollback).

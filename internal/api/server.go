@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"hestia/internal/auth"
+	"hestia/internal/inventory"
 	"hestia/internal/jobs"
 	"hestia/internal/onboard"
 	"hestia/internal/secrets"
@@ -23,6 +24,8 @@ type Config struct {
 	Auth    *auth.Service
 	Runner  *jobs.Runner
 	Onboard *onboard.Service
+	// Inventory serves /inventory; it must be started by the caller.
+	Inventory *inventory.Service
 	// Identity is the controller's SSH identity (public part is exposed).
 	Identity secrets.Identity
 	Web      fs.FS  // built frontend rooted at index.html
@@ -57,6 +60,13 @@ func New(cfg Config) http.Handler {
 	mux.HandleFunc("GET /api/v1/targets", s.requireAuth(s.listTargets))
 	mux.HandleFunc("GET /api/v1/targets/{id}", s.requireAuth(s.getTarget))
 	mux.HandleFunc("DELETE /api/v1/targets/{id}", s.requireAuth(s.deleteTarget))
+
+	mux.HandleFunc("GET /api/v1/inventory", s.requireAuth(s.listInventory))
+	mux.HandleFunc("GET /api/v1/inventory/events", s.requireAuth(s.inventoryEvents))
+	mux.HandleFunc("GET /api/v1/inventory/{id}", s.requireAuth(s.getInventory))
+	mux.HandleFunc("POST /api/v1/inventory/{id}/refresh", s.requireAuth(s.refreshInventory))
+	mux.HandleFunc("GET /api/v1/inventory/{id}/role-fix", s.requireAuth(s.rolePlan))
+	mux.HandleFunc("POST /api/v1/inventory/{id}/role-fix", s.requireAuth(s.fixRole))
 
 	// Unknown API paths must not fall through to the SPA.
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {

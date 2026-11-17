@@ -16,6 +16,7 @@ import (
 
 	"hestia/internal/api"
 	"hestia/internal/auth"
+	"hestia/internal/inventory"
 	"hestia/internal/jobs"
 	"hestia/internal/onboard"
 	"hestia/internal/secrets"
@@ -49,8 +50,9 @@ func newEnv(t *testing.T) *env {
 		t.Fatal(err)
 	}
 	ob := (&onboard.Service{Store: st, Secrets: sec, Runner: runner, Identity: id}).Init()
+	inv := (&inventory.Service{Store: st, Secrets: sec, Runner: runner, Identity: id}).Init()
 	h := api.New(api.Config{
-		Store: st, Auth: auth.New(st), Runner: runner, Onboard: ob, Identity: id, Mode: "serve", Version: "test",
+		Store: st, Auth: auth.New(st), Runner: runner, Onboard: ob, Inventory: inv, Identity: id, Mode: "serve", Version: "test",
 		Web: fstest.MapFS{
 			"index.html":    {Data: []byte("<html>spa</html>")},
 			"assets/app.js": {Data: []byte("console.log(1)")},

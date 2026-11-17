@@ -49,6 +49,9 @@ type Service struct {
 	FetchCertFP func(ctx context.Context, host string, port int) (string, error)
 	APIPort     int
 	Now         func() time.Time
+	// AfterChange is called (if set) after a target was connected or changed,
+	// so that its inventory can be refreshed. It must not block.
+	AfterChange func(targetID int64)
 
 	mu       sync.Mutex
 	sessions map[string]*session

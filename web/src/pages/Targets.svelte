@@ -2,8 +2,15 @@
   import { api } from '../lib/api.js';
   import { targetSummary } from '../lib/connect.js';
   import { fmtTime } from '../lib/jobs.js';
-  import { Boxes, Server, Trash2, Plus, KeyRound } from 'lucide-svelte';
+  import { ageSince, fmtAge } from '../lib/format.js';
+  import { entryOf, roleBanner } from '../lib/inventory.js';
+  import { createLive } from '../lib/live.svelte.js';
+  import NodeCard from '../components/NodeCard.svelte';
+  import StorageList from '../components/StorageList.svelte';
+  import RoleFix from '../components/RoleFix.svelte';
+  import { Boxes, Server, Trash2, Plus, KeyRound, RefreshCw, List } from 'lucide-svelte';
 
+  const live = createLive();
   let targets = $state([]);
   let identity = $state(null);
   let loading = $state(true);
@@ -13,7 +20,7 @@
   let deleting = $state(false);
   let dlg = $state();
 
-  async function load() {
+  async function loadTargets() {
     try {
       targets = (await api.targets()).targets || [];
       error = '';
@@ -24,9 +31,20 @@
     }
   }
   $effect(() => {
-    load();
+    loadTargets();
     api.identity().then((i) => (identity = i)).catch(() => {});
+    return live.start();
   });
+
+  async function refresh(t) {
+    try {
+      live.markCollecting(t.id);
+      await api.refreshInventory(t.id);
+    } catch (e) {
+      error = e.message;
+      live.load();
+    }
+  }
 
   function ask(t) {
     confirming = t;
@@ -60,24 +78,66 @@
 {:else if targets.length === 0}
   <p class="opacity-70 py-8 text-center">Пока ничего не подключено. <a class="link" href="#/wizard">Подключить Proxmox или сервер</a>.</p>
 {:else}
-  <div class="grid gap-4 sm:grid-cols-2">
+  <div class="grid gap-4">
     {#each targets as t (t.id)}
+      {@const e = entryOf(live.entries, t.id)}
+      {@const snap = e?.snapshot}
+      {@const age = ageSince(e?.collected_at, live.now)}
       <div class="card bg-base-200" data-target={t.name}>
-        <div class="card-body gap-2">
-          <div class="flex items-start justify-between gap-2">
-            <h2 class="card-title">
-              {#if t.kind === 'proxmox'}<Boxes size={20} class="text-primary" />{:else}<Server size={20} class="text-primary" />{/if}
-              {t.name}
-            </h2>
-            <button class="btn btn-ghost btn-sm btn-square" aria-label="Удалить {t.name}" onclick={() => ask(t)}><Trash2 size={16} /></button>
+        <div class="card-body gap-3">
+          <div class="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h2 class="card-title">
+                {#if t.kind === 'proxmox'}<Boxes size={20} class="text-primary" />{:else}<Server size={20} class="text-primary" />{/if}
+                {t.name}
+              </h2>
+              <div class="text-sm opacity-70">
+                {t.ssh_user}@{t.host}:{t.port} · {targetSummary(t)}
+                {#if snap?.clustered}
+                  <span class="badge badge-sm {snap.quorate ? 'badge-success' : 'badge-error'}" data-testid="quorum">{snap.quorate ? 'кворум есть' : 'нет кворума'}</span>
+                {/if}
+                {#if snap?.version}· Proxmox VE {snap.version}{/if}
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs opacity-70" data-testid="age">
+                {#if e?.collecting}Обновляется…{:else if age != null}Обновлено {fmtAge(age)}{:else}Данные не собирались{/if}
+              </span>
+              <button class="btn btn-ghost btn-sm" onclick={() => refresh(t)} disabled={e?.collecting} aria-label="Обновить {t.name}">
+                {#if e?.collecting}<span class="loading loading-spinner loading-xs"></span>{:else}<RefreshCw size={16} />{/if}
+                Обновить
+              </button>
+              <button class="btn btn-ghost btn-sm btn-square" aria-label="Удалить {t.name}" onclick={() => ask(t)}><Trash2 size={16} /></button>
+            </div>
           </div>
-          <div class="text-sm opacity-70">{t.ssh_user}@{t.host}:{t.port} · {targetSummary(t)}</div>
-          {#if t.nodes.length}
-            <div class="flex flex-wrap gap-1">
-              {#each t.nodes as n (n.name)}
-                <span class="badge {n.online ? 'badge-success' : 'badge-warning'} badge-outline" title={n.host_key_fp ? `SSH: ${n.host_key_fp}` : ''}>{n.name}</span>
+
+          {#if e?.error}
+            <div class="alert alert-error text-sm" role="alert" data-testid="inv-error">Сбор данных не удался: {e.error}</div>
+          {/if}
+          {#if t.kind === 'proxmox' && roleBanner(snap)}<RoleFix targetId={t.id} />{/if}
+          {#if snap?.warnings?.length && !roleBanner(snap)}
+            <div class="text-xs opacity-70">{snap.warnings.join(' · ')}</div>
+          {/if}
+
+          {#if snap}
+            <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {#each snap.nodes as n (n.name)}
+                <NodeCard node={n} guests={snap.guests} href={t.kind === 'proxmox' ? `#/targets/${t.id}/${encodeURIComponent(n.name)}` : ''} />
               {/each}
             </div>
+            {#if snap.storages.length}
+              <div>
+                <h3 class="font-semibold text-sm mb-1">Хранилища</h3>
+                <StorageList storages={snap.storages} />
+              </div>
+            {/if}
+            {#if snap.guests.length}
+              <a class="btn btn-sm btn-ghost self-start" href="#/targets/{t.id}"><List size={16} /> Все гости ({snap.guests.length})</a>
+            {/if}
+          {:else if !e?.error && !e?.collecting && live.loaded}
+            <p class="text-sm opacity-70">Данных пока нет — нажмите «Обновить».</p>
+          {:else if e?.collecting}
+            <div class="flex justify-center py-4"><span class="loading loading-spinner"></span></div>
           {/if}
           <div class="text-xs opacity-60">Подключено: {fmtTime(t.created_at)}</div>
         </div>

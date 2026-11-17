@@ -116,11 +116,8 @@ func (c *Client) get(ctx context.Context, path string, out any) error {
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
-	switch {
-	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
-		return fmt.Errorf("API Proxmox отклонил токен (%d)", resp.StatusCode)
-	case resp.StatusCode != http.StatusOK:
-		return fmt.Errorf("API Proxmox вернул %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		return &APIError{Status: resp.StatusCode, Detail: errorDetail(body)}
 	}
 	var env struct {
 		Data json.RawMessage `json:"data"`
@@ -129,6 +126,44 @@ func (c *Client) get(ctx context.Context, path string, out any) error {
 		return fmt.Errorf("разбор ответа API Proxmox: %w", err)
 	}
 	return json.Unmarshal(env.Data, out)
+}
+
+// APIError is a non-200 answer of the API. Detail is the server's message
+// (it never contains the token).
+type APIError struct {
+	Status int
+	Detail string
+}
+
+func (e *APIError) Error() string {
+	switch {
+	case e.Status == http.StatusUnauthorized:
+		return fmt.Sprintf("API Proxmox отклонил токен (%d)", e.Status)
+	case e.Status == http.StatusForbidden:
+		if e.Detail != "" {
+			return fmt.Sprintf("API Proxmox отклонил токен (%d): %s", e.Status, e.Detail)
+		}
+		return fmt.Sprintf("API Proxmox отклонил токен (%d)", e.Status)
+	case e.Detail != "":
+		return fmt.Sprintf("API Proxmox вернул %d: %s", e.Status, e.Detail)
+	}
+	return fmt.Sprintf("API Proxmox вернул %d", e.Status)
+}
+
+// errorDetail extracts the "message" of a Proxmox error body ({"data":null,
+// "message":"..."}) as one short line.
+func errorDetail(body []byte) string {
+	var m struct {
+		Message string `json:"message"`
+	}
+	if json.Unmarshal(body, &m) != nil {
+		return ""
+	}
+	msg := strings.Join(strings.Fields(m.Message), " ")
+	if r := []rune(msg); len(r) > 200 {
+		msg = string(r[:200]) + "…"
+	}
+	return msg
 }
 
 // sanitizeURLErr drops the URL from *url.Error (it carries no secrets, but

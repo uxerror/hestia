@@ -147,6 +147,14 @@ CREATE TABLE target_nodes (
 ALTER TABLE target_nodes ADD COLUMN host_key_fp   TEXT NOT NULL DEFAULT '';
 ALTER TABLE target_nodes ADD COLUMN host_key_type TEXT NOT NULL DEFAULT '';
 `},
+	{4, `
+CREATE TABLE inventory (
+	target_id    INTEGER PRIMARY KEY REFERENCES targets(id) ON DELETE CASCADE,
+	collected_at INTEGER NOT NULL DEFAULT 0,
+	data         TEXT NOT NULL DEFAULT '',
+	error        TEXT NOT NULL DEFAULT ''
+);
+`},
 }
 
 // SchemaVersion returns the highest applied migration number.

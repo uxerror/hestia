@@ -55,5 +55,10 @@ export const api = {
   createTarget: (body) => request('POST', '/targets', body),
   targets: () => request('GET', '/targets'),
   target: (id) => request('GET', '/targets/' + encodeURIComponent(id)),
+  inventory: () => request('GET', '/inventory'),
+  inventoryOf: (id) => request('GET', '/inventory/' + encodeURIComponent(id)),
+  refreshInventory: (id) => request('POST', '/inventory/' + encodeURIComponent(id) + '/refresh'),
+  rolePlan: (id) => request('GET', '/inventory/' + encodeURIComponent(id) + '/role-fix'),
+  fixRole: (id) => request('POST', '/inventory/' + encodeURIComponent(id) + '/role-fix', { confirm: true }),
   deleteTarget: (id, revert) => request('DELETE', '/targets/' + encodeURIComponent(id) + '?revert=' + (revert ? 'true' : 'false')),
 };

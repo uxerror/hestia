@@ -18,6 +18,7 @@ import (
 	"hestia/internal/api"
 	"hestia/internal/auth"
 	"hestia/internal/desktop"
+	"hestia/internal/inventory"
 	"hestia/internal/jobs"
 	"hestia/internal/onboard"
 	"hestia/internal/secrets"
@@ -67,9 +68,13 @@ type app struct {
 	store   *store.Store
 	runner  *jobs.Runner
 	handler http.Handler
+	stopInv context.CancelFunc
+	inv     *inventory.Service
 }
 
 func (a *app) close() {
+	a.stopInv()
+	a.inv.Wait()
 	a.runner.Shutdown()
 	_ = a.store.Close()
 }
@@ -102,11 +107,15 @@ func newApp(ctx context.Context, dataDir, mode string) (*app, error) {
 		return nil, fmt.Errorf("SSH-ключ Hestia: %w", err)
 	}
 	ob := (&onboard.Service{Store: st, Secrets: sec, Runner: runner, Identity: id}).Init()
+	inv := (&inventory.Service{Store: st, Secrets: sec, Runner: runner, Identity: id}).Init()
+	ob.AfterChange = inv.RefreshQuiet
+	invCtx, stopInv := context.WithCancel(ctx)
+	inv.Start(invCtx)
 	h := api.New(api.Config{
-		Store: st, Auth: auth.New(st), Runner: runner, Onboard: ob, Identity: id,
+		Store: st, Auth: auth.New(st), Runner: runner, Onboard: ob, Inventory: inv, Identity: id,
 		Web: web.Dist(), Mode: mode, Version: version,
 	})
-	return &app{store: st, runner: runner, handler: h}, nil
+	return &app{store: st, runner: runner, handler: h, stopInv: stopInv, inv: inv}, nil
 }
 
 func cmdServe(args []string) int {

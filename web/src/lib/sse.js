@@ -34,3 +34,26 @@ export function subscribeJob(id, { onUpdate, onError }) {
   };
   return close;
 }
+
+// Subscribe to inventory updates. onEntry(entry) gets every entry the server
+// publishes (a collection started or finished); onError() is called when the
+// connection drops (the browser reconnects by itself). Returns close().
+// While at least one stream is open the server refreshes targets periodically.
+export function subscribeInventory({ onEntry, onError, onOpen }) {
+  const es = new EventSource('/api/v1/inventory/events');
+  let closed = false;
+  es.addEventListener('snapshot', (ev) => {
+    if (closed) return;
+    try {
+      onEntry(JSON.parse(ev.data));
+    } catch {
+      /* ignore a malformed event */
+    }
+  });
+  es.onopen = () => !closed && onOpen?.();
+  es.onerror = () => !closed && onError?.();
+  return () => {
+    closed = true;
+    es.close();
+  };
+}

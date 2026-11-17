@@ -285,6 +285,9 @@ func (a *applier) save(ctx context.Context, t *store.Target) error {
 		return err
 	}
 	a.run.Log("info", "Цель сохранена")
+	if a.s.AfterChange != nil {
+		a.s.AfterChange(t.ID)
+	}
 	return nil
 }
 
@@ -321,12 +324,12 @@ func (a *applier) proxmox(ctx context.Context) error {
 	if err := a.run.Step("Роль "+proxmox.RoleName, func(ctx context.Context) error {
 		switch {
 		case !st.RoleExists:
-			if err := a.sh(ctx, proxmox.CmdRoleCreate); err != nil {
+			if err := a.sh(ctx, proxmox.CmdRoleCreate(st.Version)); err != nil {
 				return err
 			}
 			a.push("удалить роль "+proxmox.RoleName, func(ctx context.Context) error { return a.sh(ctx, proxmox.CmdRoleDel) })
 		case len(st.MissingPrivs()) > 0:
-			if err := a.sh(ctx, proxmox.CmdRoleModify(st.RolePrivs)); err != nil {
+			if err := a.sh(ctx, proxmox.CmdRoleModify(st.Version, st.RolePrivs)); err != nil {
 				return err
 			}
 			old := st.RolePrivs
