@@ -20,6 +20,7 @@ import (
 	"hestia/internal/desktop"
 	"hestia/internal/inventory"
 	"hestia/internal/jobs"
+	"hestia/internal/netscan"
 	"hestia/internal/onboard"
 	"hestia/internal/secrets"
 	"hestia/internal/selfinstall"
@@ -80,6 +81,7 @@ type app struct {
 	handler http.Handler
 	stopInv context.CancelFunc
 	inv     *inventory.Service
+	net     *netscan.Manager
 	gate    *selfinstall.Gate
 	remote  *selfinstall.Remote // set when started in "moved" mode (no database)
 }
@@ -90,6 +92,7 @@ func (a *app) close() {
 	}
 	a.stopInv()
 	a.inv.Wait()
+	a.net.Wait()
 	a.runner.Shutdown()
 	_ = a.store.Close()
 }
@@ -145,6 +148,8 @@ func newApp(ctx context.Context, dataDir, mode string) (*app, error) {
 	ob.AfterChange = inv.RefreshQuiet
 	invCtx, stopInv := context.WithCancel(ctx)
 	inv.Start(invCtx)
+	nm := (&netscan.Manager{Store: st, Runner: runner, Inventory: inv, Version: version}).Init()
+	nm.Start(invCtx)
 	if err := update.Finalize(ctx, st, dataDir, version); err != nil {
 		slog.Warn("update.json", "err", err)
 	}
@@ -157,11 +162,11 @@ func newApp(ctx context.Context, dataDir, mode string) (*app, error) {
 	up.CleanTemp()
 	up.StartChecks(invCtx)
 	h := api.New(api.Config{
-		Store: st, Auth: auth.New(st), Runner: runner, Onboard: ob, Inventory: inv, Identity: id,
+		Store: st, Auth: auth.New(st), Runner: runner, Onboard: ob, Inventory: inv, Netscan: nm, Identity: id,
 		Selfinstall: si, Gate: gate, Update: up, InstanceID: instanceID,
 		Web: web.Dist(), Mode: mode, Version: version,
 	})
-	return &app{store: st, runner: runner, handler: h, stopInv: stopInv, inv: inv, gate: gate}, nil
+	return &app{store: st, runner: runner, handler: h, stopInv: stopInv, inv: inv, net: nm, gate: gate}, nil
 }
 
 func cmdServe(args []string) int {

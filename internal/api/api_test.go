@@ -4,10 +4,13 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"sync"
 	"testing"
@@ -18,6 +21,7 @@ import (
 	"hestia/internal/auth"
 	"hestia/internal/inventory"
 	"hestia/internal/jobs"
+	"hestia/internal/netscan"
 	"hestia/internal/onboard"
 	"hestia/internal/secrets"
 	"hestia/internal/store"
@@ -28,6 +32,7 @@ type env struct {
 	client *http.Client
 	runner *jobs.Runner
 	store  *store.Store
+	net    *netscan.Manager
 }
 
 func newEnv(t *testing.T) *env {
@@ -51,8 +56,11 @@ func newEnv(t *testing.T) *env {
 	}
 	ob := (&onboard.Service{Store: st, Secrets: sec, Runner: runner, Identity: id}).Init()
 	inv := (&inventory.Service{Store: st, Secrets: sec, Runner: runner, Identity: id}).Init()
+	// The scanner never touches a network: every connect fails at once.
+	nm := (&netscan.Manager{Store: st, Runner: runner, Inventory: inv, Version: "test",
+		Scanner: &netscan.Scanner{Dialer: noNet{}}}).Init()
 	h := api.New(api.Config{
-		Store: st, Auth: auth.New(st), Runner: runner, Onboard: ob, Inventory: inv, Identity: id, Mode: "serve", Version: "test",
+		Store: st, Auth: auth.New(st), Runner: runner, Onboard: ob, Inventory: inv, Netscan: nm, Identity: id, Mode: "serve", Version: "test",
 		Web: fstest.MapFS{
 			"index.html":    {Data: []byte("<html>spa</html>")},
 			"assets/app.js": {Data: []byte("console.log(1)")},
@@ -61,7 +69,19 @@ func newEnv(t *testing.T) *env {
 	srv := httptest.NewServer(h)
 	jar, _ := cookiejar.New(nil)
 	t.Cleanup(func() { srv.Close(); runner.Shutdown(); _ = st.Close() })
-	return &env{srv: srv, client: &http.Client{Jar: jar}, runner: runner, store: st}
+	return &env{srv: srv, client: &http.Client{Jar: jar}, runner: runner, store: st, net: nm}
+}
+
+// noNet is a Dialer on which nothing is reachable: every connect fails after
+// a short wait (long enough for tests to catch a scan while it runs).
+type noNet struct{}
+
+func (noNet) DialContext(ctx context.Context, _ netip.Addr, _ int) (net.Conn, error) {
+	select {
+	case <-time.After(30 * time.Millisecond):
+	case <-ctx.Done():
+	}
+	return nil, errors.New("no route to host")
 }
 
 func (e *env) do(t *testing.T, c *http.Client, method, path, body string) (*http.Response, []byte) {

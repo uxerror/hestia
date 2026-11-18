@@ -10,6 +10,8 @@
   import Connect from './pages/Connect.svelte';
   import Targets from './pages/Targets.svelte';
   import Guests from './pages/Guests.svelte';
+  import NetMap from './pages/Map.svelte';
+  import Services from './pages/Services.svelte';
   import Install from './pages/Install.svelte';
   import Moved from './pages/Moved.svelte';
   import UpdateOffer from './pages/UpdateOffer.svelte';
@@ -50,7 +52,7 @@
     loggingOut = false;
   }
   const section = $derived(
-    route.name === 'jobs' || route.name === 'job' ? 'jobs' : route.name === 'targets' || route.name === 'guests' || route.name === 'install' || route.name === 'update-offer' ? 'targets' : 'wizard',
+    route.name === 'jobs' || route.name === 'job' ? 'jobs' : route.name === 'map' ? 'map' : route.name === 'services' ? 'services' : route.name === 'targets' || route.name === 'guests' || route.name === 'install' || route.name === 'update-offer' ? 'targets' : 'wizard',
   );
 </script>
 
@@ -77,6 +79,8 @@
         <ul class="menu menu-horizontal p-0">
           <li><a href="#/wizard" class:menu-active={section === 'wizard'}>Подключение</a></li>
           <li><a href="#/targets" class:menu-active={section === 'targets'}>Системы</a></li>
+          <li><a href="#/map" class:menu-active={section === 'map'}>Карта сети</a></li>
+          <li><a href="#/services" class:menu-active={section === 'services'}>Сервисы</a></li>
           <li><a href="#/jobs" class:menu-active={section === 'jobs'}>Задачи</a></li>
         </ul>
       </div>
@@ -94,10 +98,12 @@
         <span class="loading loading-spinner loading-xs"></span> Идёт перенос Hestia на сервер — изменения временно заблокированы.
       </div>
     {/if}
-    <main class="flex-1 p-4 sm:p-6 max-w-6xl w-full mx-auto">
+    <main class={route.name === 'map' ? 'flex-1 p-3 w-full' : 'flex-1 p-4 sm:p-6 max-w-6xl w-full mx-auto'}>
       {#if route.name === 'jobs'}<Jobs />
       {:else if route.name === 'job'}<JobDetail id={route.id} />
       {:else if route.name === 'targets'}<Targets />
+      {:else if route.name === 'map'}<NetMap />
+      {:else if route.name === 'services'}<Services />
       {:else if route.name === 'install'}<Install />
       {:else if route.name === 'update-offer'}{#key route.hash}<UpdateOffer hash={route.hash} />{/key}
       {:else if route.name === 'guests'}{#key route.id}<Guests id={route.id} node={route.node} />{/key}

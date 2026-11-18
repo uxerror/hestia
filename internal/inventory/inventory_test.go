@@ -64,6 +64,7 @@ type fakePVE struct {
 var (
 	reNodeStatus  = regexp.MustCompile(`^/api2/json/nodes/([^/]+)/status$`)
 	reNodeStorage = regexp.MustCompile(`^/api2/json/nodes/([^/]+)/storage$`)
+	reNetwork     = regexp.MustCompile(`^/api2/json/nodes/([^/]+)/network$`)
 	reLXC         = regexp.MustCompile(`^/api2/json/nodes/([^/]+)/lxc/(\d+)/interfaces$`)
 	reAgent       = regexp.MustCompile(`^/api2/json/nodes/([^/]+)/qemu/(\d+)/agent/network-get-interfaces$`)
 )
@@ -134,6 +135,14 @@ func (f *fakePVE) serve(w http.ResponseWriter, r *http.Request) {
 		wrap("node_status_" + reNodeStatus.FindStringSubmatch(p)[1] + ".json")
 	case reNodeStorage.MatchString(p):
 		wrap("node_storage_" + reNodeStorage.FindStringSubmatch(p)[1] + ".json")
+	case reNetwork.MatchString(p):
+		// The bridges of a real node (pve1 of the self-install fixture).
+		b, err := os.ReadFile(filepath.Join("..", "proxmox", "testdata", "real-pve9-selfinstall", "network-pve1.json"))
+		if err != nil {
+			f.t.Fatal(err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":` + string(b) + `}`))
 	case reLXC.MatchString(p):
 		id, _ := strconv.Atoi(reLXC.FindStringSubmatch(p)[2])
 		if name, ok := f.lxcOK[id]; ok {
@@ -508,6 +517,7 @@ func (a *countingAPI) LXCInterfaces(context.Context, string, int) ([]proxmox.Ifa
 func (a *countingAPI) AgentInterfaces(context.Context, string, int) ([]proxmox.Iface, error) {
 	return nil, nil
 }
+func (a *countingAPI) Network(context.Context, string) ([]proxmox.NetIface, error) { return nil, nil }
 
 func fakeAPIEnv(t *testing.T, api *countingAPI) (*env, store.Target) {
 	e := newEnv(t, func(s *inventory.Service) {
@@ -662,6 +672,11 @@ func TestCollectSSHServer(t *testing.T) {
 			return "0.80 0.40 0.20 1/300 1234\n", "", 0
 		case cmd == "cat /proc/uptime":
 			return "86400.55 1000.00\n", "", 0
+		case cmd == "ip -4 -j addr":
+			return `[{"ifname":"lo","addr_info":[{"local":"127.0.0.1","prefixlen":8,"scope":"host"}]},` +
+				`{"ifname":"eth0","addr_info":[{"local":"10.10.10.60","prefixlen":24,"scope":"global"}]},` +
+				`{"ifname":"docker0","addr_info":[{"local":"172.17.0.1","prefixlen":16,"scope":"global"}]},` +
+				`{"ifname":"veth1","addr_info":[{"local":"169.254.3.4","prefixlen":16,"scope":"link"}]}]`, "", 0
 		}
 		return "", "unexpected command: " + cmd, 127
 	}
@@ -695,10 +710,57 @@ func TestCollectSSHServer(t *testing.T) {
 		t.Fatalf("%+v", n)
 	}
 
+	// Only the real interface is a subnet for the network scan.
+	if len(s.Subnets) != 1 || s.Subnets[0] != (inventory.Subnet{Node: "nas", Iface: "eth0", CIDR: "10.10.10.60/24"}) {
+		t.Fatalf("subnets: %+v", s.Subnets)
+	}
+
 	// A changed host key is refused and the snapshot stays.
 	e.st.DB().Exec(`UPDATE targets SET host_key_fp = 'SHA256:wrong' WHERE id = ?`, tg.ID)
 	ent, job = e.refresh(tg.ID)
 	if job.Status != store.JobFailed || ent.Error == "" || ent.Snapshot == nil {
 		t.Fatalf("changed host key: %s %q", job.Status, ent.Error)
+	}
+}
+
+func TestProxmoxSubnetsAndGuestMACs(t *testing.T) {
+	f := newFakePVE(t)
+	e := newEnv(t, nil)
+	tg := e.proxmoxTarget(f, apiSecret)
+	ent, job := e.refresh(tg.ID)
+	if job.Status != store.JobDone || ent.Snapshot == nil {
+		t.Fatalf("%s %s", job.Status, job.Error)
+	}
+	s := ent.Snapshot
+
+	// The bridge of the real node fixture; the bond and the NICs are not subnets.
+	if len(s.Subnets) != len(s.Nodes) {
+		t.Fatalf("one bridge per node expected: %+v", s.Subnets)
+	}
+	for _, sn := range s.Subnets {
+		if sn.Iface != "vmbr0" || sn.CIDR != "10.10.10.50/24" || sn.Gateway != "10.10.10.1" {
+			t.Fatalf("subnet: %+v", sn)
+		}
+	}
+
+	// MACs come with the IPs: loopback (all zeros) is dropped.
+	g := guestByID(s, 110)
+	if len(g.MACs) != 1 || g.MACs[0] != "bc:24:11:e7:2b:91" {
+		t.Fatalf("lxc 110 macs: %v", g.MACs)
+	}
+	g = guestByID(s, 109)
+	if len(g.MACs) == 0 {
+		t.Fatalf("vm 109 macs: %+v", g)
+	}
+	for _, m := range g.MACs {
+		if m == "00:00:00:00:00:00" {
+			t.Fatal("loopback MAC kept")
+		}
+	}
+	// A stopped guest has none (not a nil slice in JSON).
+	for _, gg := range s.Guests {
+		if gg.Status != "running" && gg.MACs == nil {
+			t.Fatalf("guest %d: nil MACs", gg.VMID)
+		}
 	}
 }

@@ -2,6 +2,8 @@ package inventory
 
 import (
 	"context"
+	"encoding/json"
+	"net/netip"
 	"strconv"
 	"strings"
 
@@ -11,7 +13,7 @@ import (
 // collectSSH gathers the facts of a standalone server over SSH with Hestia's
 // key: the same facts as the connection probe plus CPU model, load and uptime.
 func collectSSH(ctx context.Context, run progress, tg target.Target, host string) (*Snapshot, error) {
-	snap := &Snapshot{Kind: "ssh", Nodes: []Node{}, Storages: []Storage{}, Guests: []Guest{}, Warnings: []string{}}
+	snap := &Snapshot{Kind: "ssh", Nodes: []Node{}, Storages: []Storage{}, Guests: []Guest{}, Subnets: []Subnet{}, Warnings: []string{}}
 	err := run.Step("Данные сервера", func(ctx context.Context) error {
 		f, err := tg.Facts(ctx)
 		if err != nil {
@@ -50,6 +52,10 @@ func collectSSH(ctx context.Context, run progress, tg target.Target, host string
 			n.CPUUsage = clamp01(n.Load1 / float64(n.Threads))
 		}
 		snap.Nodes = append(snap.Nodes, n)
+		// Best effort: the subnets of the server's interfaces (for the network scan).
+		if r, err := tg.Exec(ctx, "ip -4 -j addr"); err == nil {
+			snap.Subnets = parseIPAddr(n.Name, r.Stdout)
+		}
 		return nil
 	})
 	if err != nil {
@@ -91,4 +97,34 @@ func clamp01(v float64) float64 {
 		return 1
 	}
 	return v
+}
+
+// parseIPAddr reads `ip -4 -j addr`: the subnets of the real interfaces
+// (no loopback, link-local or container bridges).
+func parseIPAddr(node, out string) []Subnet {
+	var ifs []struct {
+		Name string `json:"ifname"`
+		Addr []struct {
+			Local  string `json:"local"`
+			Prefix int    `json:"prefixlen"`
+			Scope  string `json:"scope"`
+		} `json:"addr_info"`
+	}
+	subs := []Subnet{}
+	if json.Unmarshal([]byte(out), &ifs) != nil {
+		return subs
+	}
+	for _, f := range ifs {
+		if skipIface(f.Name) {
+			continue
+		}
+		for _, a := range f.Addr {
+			ip, err := netip.ParseAddr(a.Local)
+			if err != nil || ip.IsLoopback() || ip.IsLinkLocalUnicast() || a.Scope == "host" {
+				continue
+			}
+			subs = append(subs, Subnet{Node: node, Iface: f.Name, CIDR: netip.PrefixFrom(ip, a.Prefix).String()})
+		}
+	}
+	return subs
 }

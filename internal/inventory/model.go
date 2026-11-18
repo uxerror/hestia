@@ -16,10 +16,23 @@ type Snapshot struct {
 	Nodes     []Node    `json:"nodes"`
 	Storages  []Storage `json:"storages"`
 	Guests    []Guest   `json:"guests"`
+	// Subnets are the IPv4 subnets the system is in: bridges of Proxmox nodes,
+	// interfaces of an SSH server. The network scan starts from them.
+	Subnets []Subnet `json:"subnets"`
 	// NeedsAgentPriv is set when the API refused guest agent calls (403): the
 	// Hestia role lacks the privilege (see proxmox.PrivilegesFor).
 	NeedsAgentPriv bool     `json:"needs_guest_agent_audit"`
 	Warnings       []string `json:"warnings"`
+}
+
+// Subnet is a subnet of a node's interface ("10.10.10.50/24" as configured).
+type Subnet struct {
+	Node  string `json:"node"`
+	Iface string `json:"iface"`
+	CIDR  string `json:"cidr"`
+	// Gateway is the default gateway configured on the interface (Proxmox
+	// bridges); empty if unknown.
+	Gateway string `json:"gateway,omitempty"`
 }
 
 // Node is a Proxmox node or a standalone server.
@@ -85,8 +98,11 @@ type Guest struct {
 	DiskTotal int64    `json:"disk_total"`
 	Uptime    int64    `json:"uptime"`
 	IPs       []string `json:"ips"`
-	IPSource  string   `json:"ip_source"`
-	IPError   string   `json:"ip_error"`
+	// MACs are the hardware addresses of the guest's interfaces (as the
+	// guest reports them; empty if the guest is stopped).
+	MACs     []string `json:"macs"`
+	IPSource string   `json:"ip_source"`
+	IPError  string   `json:"ip_error"`
 }
 
 // Entry is what the API serves per target: the last snapshot plus its age.

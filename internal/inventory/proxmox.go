@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"net/netip"
 	"sort"
 	"strconv"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"hestia/internal/netscan/oui"
 	"hestia/internal/proxmox"
 )
 
@@ -22,6 +24,7 @@ type API interface {
 	NodeStorage(ctx context.Context, node string) ([]proxmox.NodeStorageEntry, error)
 	LXCInterfaces(ctx context.Context, node string, vmid int) ([]proxmox.Iface, error)
 	AgentInterfaces(ctx context.Context, node string, vmid int) ([]proxmox.Iface, error)
+	Network(ctx context.Context, node string) ([]proxmox.NetIface, error)
 }
 
 // progress is the part of *jobs.Run the collectors use.
@@ -56,7 +59,7 @@ func collectProxmox(ctx context.Context, api API, run progress, reqTimeout time.
 		reqTimeout = DefaultReqTimeout
 	}
 	c := &proxmoxCollector{api: api, run: run, reqTimeout: reqTimeout, fallback: clusterName}
-	snap := &Snapshot{Kind: "proxmox", Nodes: []Node{}, Storages: []Storage{}, Guests: []Guest{}, Warnings: []string{}}
+	snap := &Snapshot{Kind: "proxmox", Nodes: []Node{}, Storages: []Storage{}, Guests: []Guest{}, Subnets: []Subnet{}, Warnings: []string{}}
 	if err := run.Step("Узлы и хранилища", func(ctx context.Context) error { return c.structure(ctx, snap) }); err != nil {
 		return nil, err
 	}
@@ -116,7 +119,7 @@ func (c *proxmoxCollector) structure(ctx context.Context, snap *Snapshot) error 
 				VMID: r.VMID, Type: r.Type, Name: r.Name, Node: r.Node, Status: r.Status,
 				Template: r.Template != 0, Tags: splitTags(r.Tags), CPUs: int(r.MaxCPU), CPUUsage: r.CPU,
 				MemUsed: r.Mem, MemTotal: r.MaxMem, DiskUsed: r.Disk, DiskTotal: r.MaxDisk, Uptime: r.Uptime,
-				IPs: []string{}, IPSource: IPSourceNone,
+				IPs: []string{}, MACs: []string{}, IPSource: IPSourceNone,
 			})
 		}
 	}
@@ -144,6 +147,14 @@ func (c *proxmoxCollector) structure(ctx context.Context, snap *Snapshot) error 
 			if snap.Version == "" {
 				snap.Version = n.PVEVersion
 			}
+		}
+		rctx, cancel = c.req(ctx)
+		nets, err := c.api.Network(rctx, n.Name)
+		cancel()
+		if err != nil {
+			c.warn(snap, "Узел "+n.Name+": сетевые интерфейсы недоступны: "+err.Error())
+		} else {
+			snap.Subnets = append(snap.Subnets, bridgeSubnets(n.Name, nets)...)
 		}
 		rctx, cancel = c.req(ctx)
 		st, err := c.api.NodeStorage(rctx, n.Name)
@@ -307,6 +318,7 @@ func (c *proxmoxCollector) ips(ctx context.Context, snap *Snapshot) {
 				return
 			}
 			g.IPs = guestIPs(ifs)
+			g.MACs = guestMACs(ifs)
 			g.IPSource = src
 		}()
 	}
@@ -382,4 +394,47 @@ func guestIPs(ifs []proxmox.Iface) []string {
 		}
 	}
 	return append(append([]string{}, v4...), v6...)
+}
+
+// bridgeSubnets returns the IPv4 subnets of the active bridges of a node
+// (GET /nodes/{n}/network, field cidr).
+func bridgeSubnets(node string, nets []proxmox.NetIface) []Subnet {
+	var out []Subnet
+	for _, n := range nets {
+		if n.Type != "bridge" && n.Type != "OVSBridge" {
+			continue
+		}
+		if n.Active == 0 || n.CIDR == "" {
+			continue
+		}
+		p, err := netip.ParsePrefix(n.CIDR)
+		if err != nil || !p.Addr().Unmap().Is4() {
+			continue
+		}
+		out = append(out, Subnet{Node: node, Iface: n.Iface, CIDR: n.CIDR, Gateway: n.Gateway})
+	}
+	return out
+}
+
+// guestMACs picks the hardware addresses of the real interfaces (no loopback
+// or virtual bridges), normalised and without repeats.
+func guestMACs(ifs []proxmox.Iface) []string {
+	out := []string{}
+	seen := map[string]bool{}
+	for _, f := range ifs {
+		if skipIface(f.Name) {
+			continue
+		}
+		raw := f.HWAddr
+		if raw == "" {
+			raw = f.HardwareAddress
+		}
+		mac := oui.Normalize(raw)
+		if mac == "" || mac == "00:00:00:00:00:00" || seen[mac] {
+			continue
+		}
+		seen[mac] = true
+		out = append(out, mac)
+	}
+	return out
 }

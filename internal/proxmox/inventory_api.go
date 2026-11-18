@@ -86,10 +86,13 @@ type NodeStorageEntry struct {
 // Iface is a network interface of a guest. LXC reports Inet/Inet6 ("addr/prefix"),
 // the QEMU guest agent reports IPAddresses.
 type Iface struct {
-	Name        string `json:"name"`
-	Inet        string `json:"inet"`
-	Inet6       string `json:"inet6"`
-	IPAddresses []struct {
+	Name string `json:"name"`
+	// HWAddr is the MAC of the interface (LXC: "hwaddr", guest agent: "hardware-address").
+	HWAddr          string `json:"hwaddr"`
+	HardwareAddress string `json:"hardware-address"`
+	Inet            string `json:"inet"`
+	Inet6           string `json:"inet6"`
+	IPAddresses     []struct {
 		Address string `json:"ip-address"`
 		Type    string `json:"ip-address-type"`
 	} `json:"ip-addresses"`

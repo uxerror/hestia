@@ -170,6 +170,31 @@ CREATE TABLE handoff_tokens (
 	expires_at INTEGER NOT NULL
 );
 `},
+	{6, `
+CREATE TABLE scans (
+	id          INTEGER PRIMARY KEY AUTOINCREMENT,
+	started_at  INTEGER NOT NULL,
+	finished_at INTEGER,
+	subnets     TEXT NOT NULL DEFAULT '[]',
+	stats       TEXT NOT NULL DEFAULT '{}',
+	error       TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE hosts (
+	ip           TEXT PRIMARY KEY,
+	mac          TEXT NOT NULL DEFAULT '',
+	vendor       TEXT NOT NULL DEFAULT '',
+	random_mac   INTEGER NOT NULL DEFAULT 0,
+	names        TEXT NOT NULL DEFAULT '[]',
+	first_seen   INTEGER NOT NULL,
+	last_seen    INTEGER NOT NULL,
+	last_scan_id INTEGER NOT NULL DEFAULT 0,
+	alive        INTEGER NOT NULL DEFAULT 0,
+	source       TEXT NOT NULL DEFAULT 'scan',
+	ports        TEXT NOT NULL DEFAULT '[]',
+	services     TEXT NOT NULL DEFAULT '[]',
+	link         TEXT NOT NULL DEFAULT 'null'
+);
+`},
 }
 
 // KnownSchema is the newest schema version this binary can work with.

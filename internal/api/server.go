@@ -13,6 +13,7 @@ import (
 	"hestia/internal/auth"
 	"hestia/internal/inventory"
 	"hestia/internal/jobs"
+	"hestia/internal/netscan"
 	"hestia/internal/onboard"
 	"hestia/internal/secrets"
 	"hestia/internal/selfinstall"
@@ -28,6 +29,8 @@ type Config struct {
 	Onboard *onboard.Service
 	// Inventory serves /inventory; it must be started by the caller.
 	Inventory *inventory.Service
+	// Netscan serves /network (optional in tests).
+	Netscan *netscan.Manager
 	// Identity is the controller's SSH identity (public part is exposed).
 	Identity secrets.Identity
 	// Selfinstall moves the controller to a server; Gate carries the
@@ -80,6 +83,14 @@ func New(cfg Config) http.Handler {
 	mux.HandleFunc("POST /api/v1/inventory/{id}/refresh", s.requireAuth(s.refreshInventory))
 	mux.HandleFunc("GET /api/v1/inventory/{id}/role-fix", s.requireAuth(s.rolePlan))
 	mux.HandleFunc("POST /api/v1/inventory/{id}/role-fix", s.requireAuth(s.fixRole))
+
+	if cfg.Netscan != nil {
+		mux.HandleFunc("GET /api/v1/network", s.requireAuth(s.networkView))
+		mux.HandleFunc("POST /api/v1/network/scan", s.requireAuth(s.networkScan))
+		mux.HandleFunc("DELETE /api/v1/network/scan", s.requireAuth(s.networkCancel))
+		mux.HandleFunc("PUT /api/v1/network/settings", s.requireAuth(s.networkSettings))
+		mux.HandleFunc("DELETE /api/v1/network/hosts/{ip}", s.requireAuth(s.networkForget))
+	}
 
 	if cfg.Selfinstall != nil {
 		mux.HandleFunc("GET /api/v1/selfinstall", s.requireAuth(s.selfinstallState))

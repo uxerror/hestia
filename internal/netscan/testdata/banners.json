@@ -1,0 +1,872 @@
+{
+ "http": [
+  {
+   "ip": "10.10.10.1",
+   "port": 80,
+   "scheme": "http",
+   "path": "/",
+   "status": 200,
+   "headers": [
+    [
+     "Cache-Control",
+     "no-store"
+    ],
+    [
+     "Connection",
+     "Keep-Alive"
+    ],
+    [
+     "Content-Length",
+     "1320"
+    ],
+    [
+     "Content-Type",
+     "text/html"
+    ],
+    [
+     "Date",
+     "Wed, 18 Nov 2026 05:46:39 GMT"
+    ],
+    [
+     "Expires",
+     "0"
+    ],
+    [
+     "Pragma",
+     "no-cache"
+    ],
+    [
+     "X-Frame-Options",
+     "sameorigin"
+    ]
+   ],
+   "body": "<!doctype html>\n<html lang=\"en\">\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<link rel=\"icon\" href=\"/favicon.png\">\n<link rel=\"icon\" href=\"/favicon.svg\">\n<title>RouterOS</title>\n<link rel=\"stylesheet\" href=\"/assets/style-56715990fd10.css\">\n<script src=\"/assets/script-582e5506ba67.js\"></script>\n\n<div class=\"login\">\n<section>\n<div class=\"brand\"><img src=\"mikrotik_logo.svg\" alt=\"\"></div>\n<form class=\"form\" id=\"login\" autocapitalize=\"off\" autocorrect=\"off\">\n<div id=\"error\" class=\"errorMessage\"></div>\n<div>\n  <label for=\"name\">Login</label>\n  <input id=\"name\" autocomplete=\"username\" type=\"text\" data-defaultuser=\"admin\">\n</div>\n<div>\n  <label for=\"password\">Password</label>\n  <input id=\"password\" type=\"password\">\n</div>\n<div>\n  <input class=\"btn btn-dark-green\" type=\"submit\" value=\"Login\">\n</div>\n</form>\n<ul class=\"dock\">\n  <li><span class=\"icon icon-Software\"></span><a href=\"https://mt.lv/apps\">Apps</a>\n  <li><span class=\"icon icon-Graph\"></span><a href=\"/graphs\">Graphs</a>\n  <li><span class=\"icon icon-Licence\"></span><a href=\"/license.txt\">License</a>\n  <li><span class=\"icon icon-Help\"></span><a href=\"https://help.mikrotik.com/docs/\">Help</a>\n</ul>\n\n<div class=\"credits\"><a href=\"https://mikrotik.com/\" target=\"_blank\">© MikroTik</a></div>\n</section>\n</div>\n"
+  },
+  {
+   "ip": "10.10.10.15",
+   "port": 80,
+   "scheme": "http",
+   "path": "/",
+   "status": 301,
+   "headers": [
+    [
+     "Server",
+     "nginx"
+    ],
+    [
+     "Date",
+     "Wed, 18 Nov 2026 05:46:35 GMT"
+    ],
+    [
+     "Content-Type",
+     "text/html"
+    ],
+    [
+     "Content-Length",
+     "162"
+    ],
+    [
+     "Connection",
+     "keep-alive"
+    ],
+    [
+     "Location",
+     "https://10.10.10.15/"
+    ]
+   ],
+   "body": "<html>\r\n<head><title>301 Moved Permanently</title></head>\r\n<body>\r\n<center><h1>301 Moved Permanently</h1></center>\r\n<hr><center>nginx</center>\r\n</body>\r\n</html>\r\n"
+  },
+  {
+   "ip": "10.10.10.15",
+   "port": 9091,
+   "scheme": "http",
+   "path": "/",
+   "status": 302,
+   "headers": [
+    [
+     "Content-Type",
+     "text/html; charset=utf-8"
+    ],
+    [
+     "Location",
+     "/login.html"
+    ],
+    [
+     "Date",
+     "Wed, 18 Nov 2026 05:46:35 GMT"
+    ],
+    [
+     "Content-Length",
+     "34"
+    ]
+   ],
+   "body": "<a href=\"/login.html\">Found</a>.\n\n"
+  },
+  {
+   "ip": "10.10.10.15",
+   "port": 9091,
+   "scheme": "http",
+   "path": "/control/status",
+   "status": 401,
+   "headers": [
+    [
+     "Date",
+     "Wed, 18 Nov 2026 05:46:35 GMT"
+    ],
+    [
+     "Content-Length",
+     "0"
+    ]
+   ],
+   "body": ""
+  },
+  {
+   "ip": "10.10.10.10",
+   "port": 8006,
+   "scheme": "https",
+   "path": "/",
+   "status": 200,
+   "headers": [
+    [
+     "Cache-Control",
+     "max-age=0"
+    ],
+    [
+     "Connection",
+     "Keep-Alive"
+    ],
+    [
+     "Date",
+     "Wed, 18 Nov 2026 05:46:35 GMT"
+    ],
+    [
+     "Pragma",
+     "no-cache"
+    ],
+    [
+     "Server",
+     "pve-api-daemon/3.0"
+    ],
+    [
+     "Content-Length",
+     "2855"
+    ],
+    [
+     "Content-Type",
+     "text/html; charset=utf-8"
+    ],
+    [
+     "Expires",
+     "Wed, 18 Nov 2026 05:46:35 GMT"
+    ]
+   ],
+   "body": "<!DOCTYPE html>\n<html>\n  <head>\n    <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\" />\n    <meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no\">\n    <title>pve - Proxmox Virtual Environment</title>\n    <link rel=\"icon\" sizes=\"128x128\" href=\"/pve2/images/logo-128.png\" />\n    <link rel=\"apple-touch-icon\" sizes=\"128x128\" href=\"/pve2/images/logo-128.png\" />\n    <link rel=\"stylesheet\" type=\"text/css\" href=\"/pve2/ext6/theme-crisp/resources/theme-crisp-all.css?ver=7.0.0\" />\n    <link rel=\"stylesheet\" type=\"text/css\" href=\"/pve2/ext6/crisp/resources/charts-all.css?ver=7.0.0\" />\n    <link rel=\"stylesheet\" type=\"text/css\" href=\"/pve2/fa/css/font-awesome.css\" />\n    <link rel=\"stylesheet\" type=\"text/css\" href=\"/pve2/font-logos/css/font-logos.css\" />\n    <link rel=\"stylesheet\" type=\"text/css\" href=\"/pve2/css/ext6-pve.css?ver=9.2.10\" />\n    <link rel=\"stylesheet\" type=\"text/css\" href=\"/pwt/css/ext6-pmx.css?ver=v5.2.7-t1785796232\" />\n    <link rel=\"stylesheet\" type=\"text/css\" media=\"(prefers-color-scheme: dark)\" href=\"/pwt/themes/theme-proxmox-dark.css?ver=v5.2.7-t1785796232\" />\n    \n    <script type='text/javascript'>\n        function gettext(message) { return message; }\n        function ngettext(singular, plural, count) { return count === 1 ? singular : plural; }\n        function pgettext(context, message) { return message; }\n        function npgettext(context, singular, plural, count) { return count === 1 ? singular : plural; }\n    </script>\n    \n    <script type=\"text/javascript\" src=\"/pve2/ext6/ext-all.js?ver=7.0.0\"></script>\n    <script type=\"text/javascript\" src=\"/pve2/ext6/charts.js?ver=7.0.0\"></script>\n    \n    <script type=\"text/javascript\" src=\"/pve2/js/u2f-api.js\"></script>\n    <script type=\"text/javascript\" src=\"/qrcode.min.js\"></script>\n    <script type=\"text/javascript\">\n    Proxmox = {\n        Setup: { auth_cookie_name: 'PVEAuthCookie' },\n        defaultLang: 'en',\n        NodeName: 'pve',\n        NodeArch: 'amd64',\n        UserName: '',\n        CSRFPreventionToken: 'null',\n        ConsentText: ''\n    };\n    </script>\n    <script type=\"text/javascript\" src=\"/proxmoxlib.js?ver=v5.2.7-t1785796232\"></script>\n    <script type=\"text/javascript\" src=\"/pve2/js/pvemanagerlib.js?ver=9.2.10\"></script>\n    <script type=\"text/javascript\" src=\"/pve2/ext6/locale/locale-en.js?ver=7.0.0\"></script>\n\n    <script type=\"text/javascript\">\n    if (typeof(PVE) === 'undefined') PVE = {};\n    Ext.History.fieldid = 'x-history-field';\n    Ext.onReady(function() { Ext.create('PVE.StdWorkspace');});\n    </script>\n\n  </head>\n  <body>\n    <!-- Fields required for history management -->\n    <form id=\"history-form\" class=\"x-hidden\">\n    <input type=\"hidden\" id=\"x-history-field\"/>\n    </form>\n  </body>\n</html>\n",
+   "cert_text": "subject=OU=PVE Cluster Node, O=Proxmox Virtual Environment, CN=pve.home\nissuer=CN=Proxmox Virtual Environment, OU=74b7262a-5342-4587-a814-e733208ca6ca, O=PVE Cluster Manager CA\nnotBefore=Apr  4 18:38:22 2026 GMT\nnotAfter=Apr  3 18:38:22 2028 GMT\nX509v3 Subject Alternative Name: \n    IP Address:127.0.0.1, IP Address:0:0:0:0:0:0:0:1, DNS:localhost, IP Address:10.10.10.10, DNS:pve, DNS:pve.home\n"
+  },
+  {
+   "ip": "10.10.10.19",
+   "port": 8007,
+   "scheme": "https",
+   "path": "/",
+   "status": 200,
+   "headers": [
+    [
+     "content-type",
+     "text/html"
+    ],
+    [
+     "content-length",
+     "2369"
+    ],
+    [
+     "date",
+     "Wed, 18 Nov 2026 05:46:36 GMT"
+    ]
+   ],
+   "body": "<!DOCTYPE html>\n<html>\n  <head>\n    <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\" />\n    <meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no\">\n    <title>pbs01 - Proxmox Backup Server</title>\n    <link rel=\"icon\" sizes=\"128x128\" href=\"/images/logo-128.png\" />\n    <link rel=\"apple-touch-icon\" sizes=\"128x128\" href=\"/pve2/images/logo-128.png\" />\n    <link rel=\"stylesheet\" type=\"text/css\" href=\"/extjs/theme-crisp/resources/theme-crisp-all.css\" />\n    <link rel=\"stylesheet\" type=\"text/css\" href=\"/extjs/crisp/resources/charts-all.css\" />\n    <link rel=\"stylesheet\" type=\"text/css\" href=\"/fontawesome/css/font-awesome.css\" />\n    <link rel=\"stylesheet\" type=\"text/css\" href=\"/widgettoolkit/css/ext6-pmx.css\" />\n    <link rel=\"stylesheet\" type=\"text/css\" href=\"/css/ext6-pbs.css\" />    <link rel=\"stylesheet\" type=\"text/css\" media=\"(prefers-color-scheme: dark)\" href=\"/widgettoolkit/themes/theme-proxmox-dark.css\" />    <script type='text/javascript'>\n        function gettext(message) { return message; }\n        function ngettext(singular, plural, count) { return count === 1 ? singular : plural; }\n        function pgettext(context, message) { return message; }\n        function npgettext(context, singular, plural, count) { return count === 1 ? singular : plural; }\n    </script>\n    <script type=\"text/javascript\" src=\"/extjs/ext-all.js\"></script>\n    <script type=\"text/javascript\" src=\"/extjs/charts.js\"></script>\n    <script type=\"text/javascript\">\n    Proxmox = {\n\tSetup: { auth_cookie_name: 'PBSAuthCookie' },\n\tNodeName: \"pbs01\",\n\tUserName: \"\",\n\tdefaultLang: \"\",\n\tCSRFPreventionToken: \"\"REDACTED\"\",\n    };\n    </script>\n    <script type=\"text/javascript\" src=\"/widgettoolkit/proxmoxlib.js\"></script>\n    <script type=\"text/javascript\" src=\"/extjs/locale/locale-en.js\"></script>\n    <script type=\"text/javascript\">\n      Ext.History.fieldid = 'x-history-field';\n    </script>\n    <script type=\"text/javascript\" src=\"/qrcodejs/qrcode.min.js\"></script>\n    <script type=\"text/javascript\" src=\"/js/proxmox-backup-gui.js\"></script>\n  </head>\n  <body>\n    <!-- Fields required for history management -->\n    <form id=\"history-form\" class=\"x-hidden\">\n      <input type=\"hidden\" id=\"x-history-field\"/>\n    </form>\n  </body>\n</html>\n",
+   "cert_text": "subject=O=Proxmox Backup Server, OU=50227DD5-7692-40EB-9A13-CA6BDFB4C56A, CN=pbs01.home\nissuer=O=Proxmox Backup Server, OU=50227DD5-7692-40EB-9A13-CA6BDFB4C56A, CN=pbs01.home\nnotBefore=Aug  9 02:49:57 2026 GMT\nnotAfter=Dec 10 02:49:57 3025 GMT\nX509v3 Subject Alternative Name: \n    IP Address:127.0.0.1, IP Address:0:0:0:0:0:0:0:1, DNS:localhost, DNS:pbs01, DNS:pbs01.home\n"
+  },
+  {
+   "ip": "10.10.10.12",
+   "port": 443,
+   "scheme": "https",
+   "path": "/",
+   "status": 200,
+   "headers": [
+    [
+     "Server",
+     "nginx"
+    ],
+    [
+     "Date",
+     "Wed, 18 Nov 2026 05:46:36 GMT"
+    ],
+    [
+     "Content-Type",
+     "text/html; charset=utf-8"
+    ],
+    [
+     "Transfer-Encoding",
+     "chunked"
+    ],
+    [
+     "Connection",
+     "keep-alive"
+    ],
+    [
+     "Cache-Control",
+     "max-age=0, private, must-revalidate, no-transform"
+    ],
+    [
+     "Set-Cookie",
+     "i_like_gitea=REDACTED; Path=/; HttpOnly; Secure; SameSite=Lax"
+    ],
+    [
+     "Set-Cookie",
+     "_csrf=REDACTED; Path=/; Max-Age=86400; HttpOnly; Secure; SameSite=Lax"
+    ],
+    [
+     "X-Frame-Options",
+     "SAMEORIGIN"
+    ]
+   ],
+   "body": "<!DOCTYPE html>\n<html lang=\"en-US\" data-theme=\"gitea-auto\">\n<head>\n\t<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n\t<title>Gitea</title>\n\t<link rel=\"manifest\" href=\"data:application/json;base64,eyJuYW1lIjoiR2l0ZWEiLCJzaG9ydF9uYW1lIjoiR2l0ZWEiLCJzdGFydF91cmwiOiJodHRwczovL2dpdC5ob21lLyIsImljb25zIjpbeyJzcmMiOiJodHRwczovL2dpdC5ob21lL2Fzc2V0cy9pbWcvbG9nby5wbmciLCJ0eXBlIjoiaW1hZ2UvcG5nIiwic2l6ZXMiOiI1MTJ4NTEyIn0seyJzcmMiOiJodHRwczovL2dpdC5ob21lL2Fzc2V0cy9pbWcvbG9nby5zdmciLCJ0eXBlIjoiaW1hZ2Uvc3ZnK3htbCIsInNpemVzIjoiNTEyeDUxMiJ9XX0=\">\n\t<meta name=\"author\" content=\"Gitea - Git with a cup of tea\">\n\t<meta name=\"description\" content=\"Gitea (Git with a cup of tea) is a painless self-hosted Git service written in Go\">\n\t<meta name=\"keywords\" content=\"go,git,self-hosted,gitea\">\n\t<meta name=\"referrer\" content=\"no-referrer\">\n\n\n\t<link rel=\"icon\" href=\"/assets/img/favicon.svg\" type=\"image/svg+xml\">\n\t<link rel=\"alternate icon\" href=\"/assets/img/favicon.png\" type=\"image/png\">\n\t\n\t<meta property=\"og:title\" content=\"Gitea\">\n\t<meta property=\"og:type\" content=\"website\">\n\t<meta property=\"og:image\" content=\"/assets/img/logo.png\">\n\t<meta property=\"og:url\" content=\"https://git.home/\">\n\t<meta property=\"og:description\" content=\"Gitea (Git with a cup of tea) is a painless self-hosted Git service written in Go\">\n\n<meta property=\"og:site_name\" content=\"Gitea\">\n\n\t<link rel=\"stylesheet\" href=\"/assets/css/index.css?v=1.25.4\">\n<link rel=\"stylesheet\" href=\"/assets/css/theme-gitea-auto.css?v=1.25.4\">\n\n\t\n<script>\n\t\n\twindow.addEventListener('error', function(e) {window._globalHandlerErrors=window._globalHandlerErrors||[]; window._globalHandlerErrors.push(e);});\n\twindow.addEventListener('unhandledrejection', function(e) {window._globalHandlerErrors=window._globalHandlerErrors||[]; window._globalHandlerErrors.push(e);});\n\twindow.config = {\n\t\tappUrl: 'https:\\/\\/git.home\\/',\n\t\tappSubUrl: '',\n\t\tassetVersionEncoded: encodeURIComponent('1.25.4'), \n\t\tassetUrlPrefix: '\\/assets',\n\t\trunModeIsProd:  true ,\n\t\tcustomEmojis: {\"codeberg\":\":codeberg:\",\"git\":\":git:\",\"gitea\":\":gitea:\",\"github\":\":github:\",\"gitlab\":\":gitlab:\",\"gogs\":\":gogs:\"},\n\t\tcsrfToken: 'REDACTED',\n\t\tpageData: {},\n\t\tnotificationSettings: {\"EventSourceUpdateTime\":10000,\"MaxTimeout\":60000,\"MinTimeout\":10000,\"TimeoutStep\":10000}, \n\t\tenableTimeTracking:  true ,\n\t\t\n\t\tmermaidMaxSourceCharacters:  50000 ,\n\t\t\n\t\ti18n: {\n\t\t\tcopy_success: \"Copied!\",\n\t\t\tcopy_error: \"Copy failed\",\n\t\t\terror_occurred: \"An error occurred\",\n\t\t\tremove_label_str: \"Remove item \\\"%s\\\"\",\n\t\t\tmodal_confirm: \"Confirm\",\n\t\t\tmodal_cancel: \"Cancel\",\n\t\t\tmore_items: \"More items\",\n\t\t},\n\t};\n\t\n\twindow.config.pageData = window.config.pageData || {};\n</script>\n<script src=\"/assets/js/index.js?v=1.25.4\" onerror=\"alert('Failed to load asset files from ' + this.src + '. Please make sure the asset files can be accessed.')\"></script>\n\n\t\n</head>\n<body hx-headers='{\"x-csrf-token\": \"REDACTED\"}' hx-swap=\"outerHTML\" hx-ext=\"morph\" hx-push-url=\"false\">\n\t\n\n\t<div class=\"full height\">\n\t\t<noscript>This website requires JavaScript.</noscript>\n\n\t\t\n\n\t\t\n\t\t\t<nav id=\"navbar\" aria-label=\"Navigation Bar\">\n\t<div class=\"navbar-left\">\n\t\t\n\t\t<a class=\"item\" id=\"navbar-logo\" href=\"/\" aria-label=\"Home\">\n\t\t\t<img width=\"30\" height=\"30\" src=\"/assets/img/logo.svg\" alt=\"Logo\" aria-hidden=\"true\">\n\t\t</a>\n\n\t\t\n\t\t<div class=\"ui secondary menu navbar-mobile-right only-mobile\">\n\t\t\t\n\n\t\t\t<button class=\"item ui icon mini button tw-m-0\" id=\"navbar-expand-toggle\" aria-label=\"Navigation Menu\"><svg viewBox=\"0 0 16 16\" class=\"svg octicon-three-bars\" aria-hidden=\"true\" width=\"16\" height=\"16\"><path d=\"M1 2.75A.75.75 0 0 1 1.75 2h12.5a.75.75 0 0 1 0 1.5H1.75A.75.75 0 0 1 1 2.75m0 5A.75.75 0 0 1 1.75 7h12.5a.75.75 0 0 1 0 1.5H1.75A.75.75 0 0 1 1 7.75M1.75 12h12.5a.75.75 0 0 1 0 1.5H1.75a.75.75 0 0 1 0-1.5\"/></svg></button>\n\t\t</div>\n\n\t\t\n\t\t\n\t\t\t<a class=\"item\" href=\"/explore/repos\">Explore</a>\n\t\t\n\n\t\t\n\n\t\t\n\t\t\t<a class=\"item\" target=\"_blank\" rel=\"noopener noreferrer\" href=\"https://docs.gitea.com\">Help</a>\n\t\t\n\t</div>\n\n\t\n\t<div class=\"navbar-right\">\n\t\t\n\t\t\t\n\t\t\t\t<a class=\"item\" href=\"/user/sign_up\">\n\t\t\t\t\t<svg viewBox=\"0 0 16 16\" class=\"svg octicon-person\" aria-hidden=\"true\" width=\"16\" height=\"16\"><path d=\"M10.561 8.073a6 6 0 0 1 3.432 5.142.75.75 0 1 1-1.498.07 4.5 4.5 0 0 0-8.99 0 .75.75 0 0 1-1.498-.07 6 6 0 0 1 3.431-5.142 3.999 3.999 0 1 1 5.123 0M10.5 5a2.5 2.5 0 1 0-5 0 2.5 2.5 0 0 0 5 0\"/></svg>\n\t\t\t\t\t<span class=\"tw-ml-1\">Register</span>\n\t\t\t\t</a>\n\t\t\t\n\t\t\t<a class=\"item\" rel=\"nofollow\" href=\"/user/login?redirect_to=%2f\">\n\t\t\t\t<svg viewBox=\"0 0 16 16\" class=\"svg octicon-sign-in\" aria-hidden=\"true\" width=\"16\" height=\"16\"><path d=\"M2 2.75C2 1.784 2.784 1 3.75 1h2.5a.75.75 0 0 1 0 1.5h-2.5a.25.25 0 0 0-.25.25v10.5c0 .138.112.25.25.25h2.5a.75.75 0 0 1 0 1.5h-2.5A1.75 1.75 0 0 1 2 13.25Zm6.56 4.5h5.69a.75.75 0 0 1 0 1.5H8.56l1.97 1.97a.749.749 0 0 1-.326 1.275.75.75 0 0 1-.734-.215L6.22 8.53a.75.75 0 0 1 0-1.06l3.25-3.25a.749.749 0 0 1 1.275.326.75.75 0 0 1-.215.734Z\"/></svg>\n\t\t\t\t<span class=\"tw-ml-1\">Sign In</span>\n\t\t\t</a>\n\t\t\n\t</div>\n\n\t\n\t\n</nav>\n\n\t\t\n\n\n\n<div role=\"main\" aria-label=\"Home\" class=\"page-content home\">\n\t<div class=\"tw-mb-8 tw-px-8\">\n\t\t<div class=\"center\">\n\t\t\t<img class=\"logo\" width=\"220\" height=\"220\" src=\"/assets/img/logo.svg\" alt=\"Logo\">\n\t\t\t<div class=\"hero\">\n\t\t\t\t<h1 class=\"ui icon header title tw-text-balance\">\n\t\t\t\t\tGitea\n\t\t\t\t</h1>\n\t\t\t\t<h2 class=\"tw-text-balance\">A painless, self-hosted Git service</h2>\n\t\t\t</div>\n\t\t</div>\n\t</div>\n\t<div class=\"ui stackable middle very relaxed page grid\">\n\t\t<div class=\"eight wide center column\">\n\t\t\t<h1 class=\"hero ui icon header\">\n\t\t\t\t<svg viewBox=\"0 0 16 16\" class=\"svg octicon-flame\" aria-hidden=\"true\" width=\"16\" height=\"16\"><path d=\"M9.533.753V.752c.217 2.385 1.463 3.626 2.653 4.81C13.37 6.74 14.498 7.863 14.498 10c0 3.5-3 6-6.5 6S1.5 13.512 1.5 10c0-1.298.536-2.56 1.425-3.286.376-.308.862 0 1.035.454C4.46 8.487 5.581 8.419 6 8c.282-.282.341-.811-.003-1.5C4.34 3.187 7.035.75 8.77.146c.39-.137.726.194.763.607M7.998 14.5c2.832 0 5-1.98 5-4.5 0-1.463-.68-2.19-1.879-3.383l-.036-.037c-1.013-1.008-2.3-2.29-2.834-4.434-.322.256-.63.579-.864.953-.432.696-.621 1.58-.046 2.73.473.947.67 2.284-.278 3.232-.61.61-1.545.84-2.403.633a2.8 2.8 0 0 1-1.436-.874A3.2 3.2 0 0 0 3 10c0 2.53 2.164 4.5 4.998 4.5\"/></svg> Easy to install\n\t\t\t</h1>\n\t\t\t<p class=\"large tw-text-balance\">\n\t\t\t\tSimply <a target=\"_blank\" rel=\"noopener noreferrer\" href=\"https://docs.gitea.com/installation/install-from-binary\">run the binary</a> for your platform, ship it with <a target=\"_blank\" rel=\"noopener noreferrer\" href=\"https://github.com/go-gitea/gitea/tree/master/docker\">Docker</a>, or get it <a target=\"_blank\" rel=\"noopener noreferrer\" href=\"https://docs.gitea.com/installation/install-from-package\">packaged</a>.\n\t\t\t</p>\n\t\t</div>\n\t\t<div class=\"eight wide center column\">\n\t\t\t<h1 class=\"hero ui icon header\">\n\t\t\t\t<svg viewBox=\"0 0 16 16\" class=\"svg octicon-device-desktop\" aria-hidden=\"true\" width=\"16\" height=\"16\"><path d=\"M14.25 1c.966 0 1.75.784 1.75 1.75v7.5A1.75 1.75 0 0 1 14.25 12h-3.727c.099 1.041.52 1.872 1.292 2.757A.752.752 0 0 1 11.25 16h-6.5a.75.75 0 0 1-.565-1.243c.772-.885 1.192-1.716 1.292-2.757H1.75A1.75 1.75 0 0 1 0 10.25v-7.5C0 1.784.784 1 1.75 1ZM1.75 2.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25ZM9.018 12H6.982a5.7 5.7 0 0 1-.765 2.5h3.566a5.7 5.7 0 0 1-.765-2.5\"/></svg> Cross-platform\n\t\t\t</h1>\n\t\t\t<p class=\"large tw-text-balance\">\n\t\t\t\tGitea runs anywhere <a target=\"_blank\" rel=\"noopener noreferrer\" href=\"https://go.dev/\">Go</a> can compile for: Windows, macOS, Linux, ARM, etc. Choose the one you love!\n\t\t\t</p>\n\t\t</div>\n\t</div>\n\t<div class=\"ui stackable middle very relaxed page grid\">\n\t\t<div class=\"eight wide center column\">\n\t\t\t<h1 class=\"hero ui icon header\">\n\t\t\t\t<svg viewBox=\"0 0 16 16\" class=\"svg octicon-rocket\" aria-hidden=\"true\" width=\"16\" height=\"16\"><path d=\"M14.064 0h.186C15.216 0 16 .784 16 1.75v.186a8.75 8.75 0 0 1-2.564 6.186l-.458.459q-.472.471-.979.904v3.207c0 .608-.315 1.172-.833 1.49l-2.774 1.707a.75.75 0 0 1-1.11-.418l-.954-3.102a1 1 0 0 1-.145-.125L3.754 9.816a1 1 0 0 1-.124-.145L.528 8.717a.75.75 0 0 1-.418-1.11l1.71-2.774A1.75 1.75 0 0 1 3.31 4h3.204q.433-.508.904-.979l.459-.458A8.75 8.75 0 0 1 14.064 0M8.938 3.623h-.002l-.458.458c-.76.76-1.437 1.598-2.02 2.5l-1.5 2.317 2.143 2.143 2.317-1.5c.902-.583 1.74-1.26 2.499-2.02l.459-.458a7.25 7.25 0 0 0 2.123-5.127V1.75a.25.25 0 0 0-.25-.25h-.186a7.25 7.25 0 0 0-5.125 2.123M3.56 14.56c-.732.732-2.334 1.045-3.005 1.148a.23.23 0 0 1-.201-.064.23.23 0 0 1-.064-.201c.103-.671.416-2.273 1.15-3.003a1.502 1.502 0 1 1 2.12 2.12m6.94-3.935q-.132.09-.266.175l-2.35 1.521.548 1.783 1.949-1.2a.25.25 0 0 0 .119-.213ZM3.678 8.116 5.2 5.766q.087-.135.176-.266H3.309a.25.25 0 0 0-.213.119l-1.2 1.95ZM12 5a1 1 0 1 1-2 0 1 1 0 0 1 2 0\"/></svg> Lightweight\n\t\t\t</h1>\n\t\t\t<p class=\"large tw-text-balance\">\n\t\t\t\tGitea has low minimal requirements and can run on an inexpensive Raspberry Pi. Save your machine energy!\n\t\t\t</p>\n\t\t</div>\n\t\t<div class=\"eight wide center column\">\n\t\t\t<h1 class=\"hero ui icon header\">\n\t\t\t\t<svg viewBox=\"0 0 16 16\" class=\"svg octicon-code\" aria-hidden=\"true\" width=\"16\" height=\"16\"><path d=\"m11.28 3.22 4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.749.749 0 0 1-1.275-.326.75.75 0 0 1 .215-.734L13.94 8l-3.72-3.72a.749.749 0 0 1 .326-1.275.75.75 0 0 1 .734.215m-6.56 0a.75.75 0 0 1 1.042.018.75.75 0 0 1 .018 1.042L2.06 8l3.72 3.72a.749.749 0 0 1-.326 1.275.75.75 0 0 1-.734-.215L.47 8.53a.75.75 0 0 1 0-1.06Z\"/></svg> Open Source\n\t\t\t</h1>\n\t\t\t<p class=\"large tw-text-balance\">\n\t\t\t\tGo get <a target=\"_blank\" rel=\"noopener noreferrer\" href=\"https://code.gitea.io/gitea\">code.gitea.io/gitea</a>! Join us by <a target=\"_blank\" rel=\"noopener noreferrer\" href=\"https://github.com/go-gitea/gitea\">contributing</a> to make this project even better. Don't be shy to be a contributor!\n\t\t\t</p>\n\t\t</div>\n\t</div>\n</div>\n\n\n\t\t\n\t</div>\n\t\n\t<footer class=\"page-footer\" role=\"group\" aria-label=\"Footer\">\n\t<div class=\"left-links\" role=\"contentinfo\" aria-label=\"About Software\">\n\t\t\n\t\t\t<a target=\"_blank\" rel=\"noopener noreferrer\" href=\"https://about.gitea.com\">Powered by Gitea</a>\n\t\t\n\t\t\n\t\t\tVersion:\n\t\t\t\n\t\t\t\t1.25.4\n\t\t\t\n\t\t\n\t\t\n\t\t\tPage: <strong>194ms</strong>\n\t\t\tTemplate: <strong>194ms</strong>\n\t\t\n\t</div>\n\t<div class=\"right-links\" role=\"group\" aria-label=\"Links\">\n\t\t<div class=\"ui dropdown upward\">\n\t\t\t<span class=\"flex-text-inline\"><svg viewBox=\"0 0 16 16\" class=\"svg octicon-globe\" aria-hidden=\"true\" width=\"14\" height=\"14\"><path d=\"M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0M5.78 8.75a9.64 9.64 0 0 0 1.363 4.177q.383.64.857 1.215c.245-.296.551-.705.857-1.215A9.64 9.64 0 0 0 10.22 8.75Zm4.44-1.5a9.64 9.64 0 0 0-1.363-4.177c-.307-.51-.612-.919-.857-1.215a10 10 0 0 0-.857 1.215A9.64 9.64 0 0 0 5.78 7.25Zm-5.944 1.5H1.543a6.51 6.51 0 0 0 4.666 5.5q-.184-.271-.352-.552c-.715-1.192-1.437-2.874-1.581-4.948m-2.733-1.5h2.733c.144-2.074.866-3.756 1.58-4.948q.18-.295.353-.552a6.51 6.51 0 0 0-4.666 5.5m10.181 1.5c-.144 2.074-.866 3.756-1.58 4.948q-.18.296-.353.552a6.51 6.51 0 0 0 4.666-5.5Zm2.733-1.5a6.51 6.51 0 0 0-4.666-5.5q.184.272.353.552c.714 1.192 1.436 2.874 1.58 4.948Z\"/></svg> English</span>\n\t\t\t<div class=\"menu language-menu\">\n\t\t\t\t<a lang=\"id-ID\" data-url=\"/?lang=id-ID\" class=\"item \">Bahasa Indonesia</a>\n\t\t\t\t<a lang=\"de-DE\" data-url=\"/?lang=de-DE\" class=\"item \">Deutsch</a>\n\t\t\t\t<a lang=\"en-US\" data-url=\"/?lang=en-US\" class=\"item selected\">English</a>\n\t\t\t\t<a lang=\"es-ES\" data-url=\"/?lang=es-ES\" class=\"item \">Español</a>\n\t\t\t\t<a lang=\"fr-FR\" data-url=\"/?lang=fr-FR\" class=\"item \">Français</a>\n\t\t\t\t<a lang=\"ga-IE\" data-url=\"/?lang=ga-IE\" class=\"item \">Gaeilge</a>\n\t\t\t\t<a lang=\"it-IT\" data-url=\"/?lang=it-IT\" class=\"item \">Italiano</a>\n\t\t\t\t<a lang=\"lv-LV\" data-url=\"/?lang=lv-LV\" class=\"item \">Latviešu</a>\n\t\t\t\t<a lang=\"hu-HU\" data-url=\"/?lang=hu-HU\" class=\"item \">Magyar nyelv</a>\n\t\t\t\t<a lang=\"nl-NL\" data-url=\"/?lang=nl-NL\" class=\"item \">Nederlands</a>\n\t\t\t\t<a lang=\"pl-PL\" data-url=\"/?lang=pl-PL\" class=\"item \">Polski</a>\n\t\t\t\t<a lang=\"pt-PT\" data-url=\"/?lang=pt-PT\" class=\"item \">Português de Portugal</a>\n\t\t\t\t<a lang=\"pt-BR\" data-url=\"/?lang=pt-BR\" class=\"item \">Português do Brasil</a>\n\t\t\t\t<a lang=\"fi-FI\" data-url=\"/?lang=fi-FI\" class=\"item \">Suomi</a>\n\t\t\t\t<a lang=\"sv-SE\" data-url=\"/?lang=sv-SE\" class=\"item \">Svenska</a>\n\t\t\t\t<a lang=\"tr-TR\" data-url=\"/?lang=tr-TR\" class=\"item \">Türkçe</a>\n\t\t\t\t<a lang=\"cs-CZ\" data-url=\"/?lang=cs-CZ\" class=\"item \">Čeština</a>\n\t\t\t\t<a lang=\"el-GR\" data-url=\"/?lang=el-GR\" class=\"item \">Ελληνικά</a>\n\t\t\t\t<a lang=\"bg-BG\" data-url=\"/?lang=bg-BG\" class=\"item \">Български</a>\n\t\t\t\t<a lang=\"ru-RU\" data-url=\"/?lang=ru-RU\" class=\"item \">Русский</a>\n\t\t\t\t<a lang=\"uk-UA\" data-url=\"/?lang=uk-UA\" class=\"item \">Українська</a>\n\t\t\t\t<a lang=\"fa-IR\" data-url=\"/?lang=fa-IR\" class=\"item \">فارسی</a>\n\t\t\t\t<a lang=\"ml-IN\" data-url=\"/?lang=ml-IN\" class=\"item \">മലയാളം</a>\n\t\t\t\t<a lang=\"ja-JP\" data-url=\"/?lang=ja-JP\" class=\"item \">日本語</a>\n\t\t\t\t<a lang=\"zh-CN\" data-url=\"/?lang=zh-CN\" class=\"item \">简体中文</a>\n\t\t\t\t<a lang=\"zh-TW\" data-url=\"/?lang=zh-TW\" class=\"item \">繁體中文（台灣）</a>\n\t\t\t\t<a lang=\"zh-HK\" data-url=\"/?lang=zh-HK\" class=\"item \">繁體中文（香港）</a>\n\t\t\t\t<a lang=\"ko-KR\" data-url=\"/?lang=ko-KR\" class=\"item \">한국어</a>\n\t\t\t\t</div>\n\t\t</div>\n\t\t<a href=\"/assets/licenses.txt\">Licenses</a>\n\t\t<a href=\"/api/swagger\">API</a>\n\t\t\n\t</div>\n</footer>\n\n\t\n</body>\n</html>\n\n",
+   "cert_text": "subject=CN=git.home\nissuer=CN=MyHomeCA\nnotBefore=Mar  6 15:56:05 2026 GMT\nnotAfter=Mar  6 15:56:05 2027 GMT\nX509v3 Subject Alternative Name: \n    DNS:git.home\n"
+  },
+  {
+   "ip": "10.10.10.17",
+   "port": 81,
+   "scheme": "http",
+   "path": "/",
+   "status": 200,
+   "headers": [
+    [
+     "Server",
+     "openresty"
+    ],
+    [
+     "Date",
+     "Wed, 18 Nov 2026 05:46:36 GMT"
+    ],
+    [
+     "Content-Type",
+     "text/html"
+    ],
+    [
+     "Content-Length",
+     "1482"
+    ],
+    [
+     "Last-Modified",
+     "Sat, 08 Aug 2026 21:14:08 GMT"
+    ],
+    [
+     "Connection",
+     "keep-alive"
+    ],
+    [
+     "ETag",
+     "\"6a779c20-5ca\""
+    ],
+    [
+     "Accept-Ranges",
+     "bytes"
+    ]
+   ],
+   "body": "<!DOCTYPE html>\n<html lang=\"en\">\n\t<head>\n\t\t<meta charset=\"utf-8\" />\n\t\t<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n\t\t<title>Nginx Proxy Manager</title>\n\t\t<meta name=\"description\" content=\"Manage Nginx hosts with a simple, powerful interface\" />\n\t\t<link rel=\"preload\" href=\"/images/logo-no-text.svg\" as=\"image\" type=\"image/svg+xml\" fetchPriority=\"high\">\n\t\t<link\n\t\t\trel=\"apple-touch-icon\"\n\t\t\tsizes=\"180x180\"\n\t\t\thref=\"/images/favicon/apple-touch-icon.png\" />\n\t\t<link\n\t\t\trel=\"icon\"\n\t\t\ttype=\"image/png\"\n\t\t\tsizes=\"32x32\"\n\t\t\thref=\"/images/favicon/favicon-32x32.png\" />\n\t\t<link\n\t\t\trel=\"icon\"\n\t\t\ttype=\"image/png\"\n\t\t\tsizes=\"16x16\"\n\t\t\thref=\"/images/favicon/favicon-16x16.png\" />\n\t\t<link rel=\"manifest\" href=\"/images/favicon/site.webmanifest\" />\n\t\t<link\n\t\t\trel=\"mask-icon\"\n\t\t\thref=\"/images/favicon/safari-pinned-tab.svg\"\n\t\t\tcolor=\"#5bbad5\" />\n\t\t<link rel=\"shortcut icon\" href=\"/images/favicon/favicon.ico\" />\n\t\t<meta name=\"msapplication-TileColor\" content=\"#4a4a4a\" />\n\t\t<meta\n\t\t\tname=\"msapplication-config\"\n\t\t\tcontent=\"/images/favicon/browserconfig.xml\" />\n\t\t<meta name=\"theme-color\" content=\"#ffffff\" />\n\t\t<script type=\"module\" crossorigin src=\"/assets/index-tpjZMrJu.js\"></script>\n\t\t<link rel=\"stylesheet\" crossorigin href=\"/assets/index-DWQyIDxN.css\">\n\t</head>\n\t<body>\n\t\t<noscript>You need to enable JavaScript to run this app.</noscript>\n\t\t<div id=\"root\"></div>\n\t\t<script>\n\t\t\tif (global === undefined) {\n\t\t\t\tvar global = window;\n\t\t\t}\n\t\t</script>\n\t</body>\n</html>\n"
+  },
+  {
+   "ip": "10.10.10.99",
+   "port": 80,
+   "scheme": "http",
+   "path": "/",
+   "status": 200,
+   "headers": [
+    [
+     "Server",
+     "nginx"
+    ],
+    [
+     "Date",
+     "Wed, 18 Nov 2026 05:46:36 GMT"
+    ],
+    [
+     "Content-Type",
+     "text/html"
+    ],
+    [
+     "Content-Length",
+     "544"
+    ],
+    [
+     "Last-Modified",
+     "Mon, 26 Oct 2026 22:52:34 GMT"
+    ],
+    [
+     "Connection",
+     "keep-alive"
+    ],
+    [
+     "Keep-Alive",
+     "timeout=20"
+    ],
+    [
+     "ETag",
+     "\"6adfd9b2-220\""
+    ],
+    [
+     "Cache-Control",
+     "no-cache"
+    ],
+    [
+     "Accept-Ranges",
+     "bytes"
+    ]
+   ],
+   "body": "<!DOCTYPE html>\n<html>\n    <body>\n        <input type=\"hidden\" id=\"http\" name=\"http\" value=\"5000\">\n        <input type=\"hidden\" id=\"https\" name=\"https\" value=\"5001\">\n        <input type=\"hidden\" id=\"prefer_https\" name=\"prefer_https\" value=\"false\">\n    </body>\n    <script type=\"text/javascript\">\n        var protocol=location.protocol;\n        var port=location.protocol === \"https:\" ? 5001 : 5000;\n        var URL=protocol+\"//\"+location.hostname+\":\"+port+location.pathname+location.search;\n        location.replace(URL);\n    </script>\n</html>\n"
+  },
+  {
+   "ip": "10.10.10.36",
+   "port": 443,
+   "scheme": "https",
+   "path": "/",
+   "status": 200,
+   "headers": [
+    [
+     "Content-Type",
+     "text/html"
+    ],
+    [
+     "Content-Length",
+     "10741"
+    ],
+    [
+     "Content-Security-Policy",
+     "script-src 'self' 'unsafe-inline' 'unsafe-eval';"
+    ],
+    [
+     "Date",
+     "Wed, 18 Nov 2026 05:46:36 GMT"
+    ],
+    [
+     "ETag",
+     "\"0080e062\""
+    ],
+    [
+     "X-Content-Type-Options",
+     "nosniff"
+    ],
+    [
+     "X-Frame-Options",
+     "sameorigin"
+    ],
+    [
+     "X-XSS-Protection",
+     "1; mode=block"
+    ]
+   ],
+   "body": "<!-- RpPageHeader RpUrl=/index.html RpAccess=Realm2 RpObjectType=Static --><!DOCTYPE HTML>\n<html>\n<head>\n<!--! GUI built June 22nd, 2022, 8:15:14 AM UTC -->\n<meta http-equiv=X-UA-Compatible content=\"IE=edge\"/>\n<meta http-equiv=Content-Type content=\"text/html; charset=utf-8\"/>\n<meta name=copyright content=\"© Copyright 2006-2022 Hewlett Packard Enterprise Development LP\"/>\n<title></title>\n<link href=\"/favicon.ico?v=4\" rel=\"shortcut icon\"/>\n<link href=css/jquery-ui.css rel=stylesheet type=text/css media=\"all\"/>\n<link href=css/eov.css rel=stylesheet type=text/css media=\"all\"/>\n<!--[if lte IE 9]><link href=\"css/eov_lteIE9.css\" rel=\"stylesheet\" type=\"text/css\" media=\"all\" /><![endif]-->\n<link href=alt/css/style.css rel=stylesheet type=text/css media=\"all\"/>\n<script type=text/javascript src=js/json2.js></script><script src=js/jquery.js></script><script src=js/jquery.eventsource.js></script><script src=js/jquery-ui.js></script><script src=js/iLO.js type=text/javascript></script><script type=text/javascript>var me = this, topPage = self;\n\niLOGlobal.topPage = me.topPage;\n\nvar SMHwin = {}, EVENT_WATCHDOG_TIMEOUT_MS = 6e4, EVENT_WATCHDOG_RETRY_MAX = 3, eventWatchdogTimerID = 0, eventWatchdogRetries = 0;\n\n$.getJSON(\"lang/en/strings.js\", function(data) {\n  jQuery.fn.localize.data.strings = data, iLOGlobal.langData.en = data;\n});</script></head><body id=index class=\"loading content\" style=overflow:hidden>\n<!--[if lt IE 11]>You are using an unsupported version of Internet Explorer (IE8 or lower). Please use the latest version of your web browser.<![endif]-->\n<noscript><div class='signInWarning' style='display: block'> <br /> You must have JavaScript enabled in your browser. </div></noscript>\n<div name=modalFrame id=modalFrame frameborder=0 scrolling=no noresize=noresize style=width:100%;height:100%;z-index:4>\n<div id=content>\n</div>\n</div>\n<script type=text/javascript>function startEventWatchDog() {\n  stopEventWatchDog(), eventWatchdogTimerID = setTimeout(eventWatchDogTrigger, EVENT_WATCHDOG_TIMEOUT_MS);\n}\n\nfunction stopEventWatchDog() {\n  eventWatchdogTimerID > 0 && (clearTimeout(eventWatchdogTimerID), eventWatchdogTimerID = 0);\n}\n\nfunction eventWatchDogTrigger() {\n  eventWatchdogTimerID = 0, $.getJSON(\"/json/session_info\").done(function(json) {\n    eventWatchdogRetries = 0, showApplication(), iLOGlobal.isFlashPolling === !0 && refreshFlashPolling();\n  }).fail(function(jqxhr, statusText, errorText) {\n    switch (errorText) {\n     case \"Forbidden\":\n      doLogout({\n        langKey: \"login.sessionExp\",\n        text: \"Session expired.\"\n      }, 0);\n      break;\n\n     default:\n      eventWatchdogRetries++, eventWatchdogRetries < EVENT_WATCHDOG_RETRY_MAX ? startEventWatchDog() : doLogout({\n        langKey: \"login.connectionLost\",\n        text: \"The connection with the server has been terminated or reset.\"\n      }, 0);\n    }\n  });\n}\n\nfunction stopAllPolling() {\n  stopEventWatchDog(), eventWatchdogRetries = 0, $.eventsource(\"close\", \"*\"), iLOGlobal.isFlashPolling = !1;\n}\n\nfunction doLogout(message, timeout) {\n  me.stopAllPolling();\n  var jsonObj = {\n    method: \"logout\"\n  }, alt_err = !1;\n  iLO.sendJsonRequest(\"logout\", \"POST\", \"json/login_session\", jsonObj, function(o, fname, error) {\n    iLO.favIcon(), alt_err = iLOGlobal.features.alt_mode_err;\n    var tmpVersion = iLOGlobal.cache.version ? iLOGlobal.cache.version : \"\", tmpCN = iLOGlobal.cache.cn ? iLOGlobal.cache.cn : \"\";\n    iLOGlobal.cache = {}, iLOGlobal.init(), iLO.setCookie(\"sessionKey\", null), iLOGlobal.isApplication = !0, \n    iLOGlobal.logout_message = jQuery.isPlainObject(message) ? message : null, iLOGlobal.login_delay = jQuery.existsNonNull(timeout) ? timeout : 0, \n    iLOGlobal.topPage = me.topPage, iLOGlobal.cache.version = jQuery.existsNonNull(tmpVersion) ? tmpVersion : \"\", \n    iLOGlobal.cache.cn = jQuery.existsNonNull(tmpCN) ? tmpCN : \"\", alt_err ? showAltModeErrorCases(\"logout\") : showLogin();\n  });\n}\n\nfunction showLogin(arg) {\n  iLOGlobal.pollingDialogDoc = null;\n  var fresh = jQuery.isValidString(arg) && \"fresh\" == arg ? !0 : !1, appFrame = $(\"#appFrame\");\n  if ($(\"#modalFrame\").show(), $(\"iframe\").hide(), fresh || !appFrame.attr('src').match(\"html/login.html\")) appFrame.attr('src', baseURL + 'html/login.html'), \n  appFrame.on('load', function() {\n    setTimeout(function() {\n      $(\"#modalFrame\").hide(), appFrame.show();\n    }, 1);\n  }); else try {\n    window.frames.appFrame.updatePageFromIndex();\n  } catch (e) {}\n}\n\nfunction esFlashListener(data) {\n  if (data && jQuery.isPlainObject(data) && \"undefined\" != typeof data.state) switch (\"COMPLETED\" == data.state && (data.progress = 100), \n  setTimeout(function() {\n    $.publish(\"/flash_status\", [ data ]);\n  }, 1), data.state) {\n   case \"COMPLETED\":\n   case \"ERROR\":\n    me.endFlashPolling(!1);\n  }\n}\n\nfunction startFlashPolling() {\n  1 != iLOGlobal.isFlashPolling && (iLOGlobal.isFlashPolling = !0, $.eventsource(\"close\", \"flash-event-source\"), \n  $.eventsource({\n    label: \"flash-event-source\",\n    url: \"/sse/flash\",\n    dataType: \"json\",\n    message: function(data) {\n      me.esFlashListener(data);\n    }\n  }));\n}\n\nfunction endFlashPolling(onlyIfIdle) {\n  me.setTimeout(function() {\n    iLO.sendJsonRequest(\"flash_status\", \"GET\", \"json/flash_status\", null, function(o, fname, error) {\n      if ((!error || \"success\" == error) && jQuery.isPlainObject(o) && \"undefined\" != typeof o.state) {\n        if (me.setTimeout(function() {\n          me.jQuery.publish(\"/flash_status\", [ o ]);\n        }, 1), onlyIfIdle && \"IDLE\" != o.state && \"ERROR\" != o.state && \"COMPLETED\" != o.state) return 0 == iLOGlobal.isFlashPolling && me.refreshFlashPolling(), \n        !1;\n        try {\n          if (iLOGlobal.content.toString().indexOf(\"admin_firmware.html\") > -1 || iLOGlobal.content.toString().indexOf(\"admin_language.html\") > -1) return !1;\n        } catch (e) {}\n        $.eventsource(\"close\", \"flash-event-source\"), iLOGlobal.isFlashPolling = !1;\n      }\n    });\n  }, 2e3);\n}\n\nfunction refreshFlashPolling() {\n  iLOGlobal.isFlashPolling = !1, me.startFlashPolling();\n}\n\nfunction pauseFlashPolling() {\n  iLOGlobal.isFlashPolling = !1;\n}\n\nfunction startSsePolling() {\n  startEventWatchDog(), $.eventsource({\n    label: \"ui-event-source\",\n    url: \"/sse/ui\",\n    dataType: \"json\",\n    error: function(data) {\n      me.esErrorListener(data);\n    }\n  });\n}\n\nfunction esErrorListener(event) {\n  $.eventsource(\"removeEventListener\", \"ui-event-source\", \"error\"), $.eventsource(\"addEventListener\", \"ui-event-source\", \"error\", function(data) {\n    startEventWatchDog(), data && 2 === data.eventPhase && (!data.target || data.target && 0 != data.target.readyState) && data.status && 403 == data.status && me.doLogout({\n      langKey: \"login.sessionExp\",\n      text: \"Session expired.\"\n    }, 0);\n  }), $.eventsource(\"addEventListener\", \"ui-event-source\", \"message\", function(data) {\n    data && jQuery.isPlainObject(data) && (me.jQuery.publish(\"/ui_events\", [ [ data ] ]), \n    jQuery.existsNonNull(data.event) && (me.jQuery.publish(\"/ui_events/\" + data.event, [ data ]), \n    \"EVT_ILO_RESET_PULSE\" === data.event ? me.doLogout({\n      langKey: \"adm_firmware.waitMsg2\",\n      text: \"iLO is being reset. <br/><br/>If an SSL or other connection error message is displayed, please clear your browser cache, restart your browser and re-login.<br/>\"\n    }, 60) : \"EVT_FLASH_START\" === data.event ? me.startFlashPolling() : \"EVT_FLASH_END\" === data.event && me.endFlashPolling(!1)));\n  });\n}\n\nfunction showApplication() {\n  startSsePolling(), $(\"#appFrame\").attr('src', baseURL + 'html/application.html').on('load', function() {\n    $(\"#modalFrame\").hide(), $(\"#appFrame\").show();\n  });\n}\n\nfunction showFWUpdate() {\n  iLO.setCookie(\"altModeProb\", iLOGlobal.features.alt_mode.toString()), $(\"#appFrame\").attr('src', baseURL + 'html/admin_firmware.html').on('load', function() {\n    $(\"#modalFrame\").hide(), $(\"#appFrame\").show();\n  });\n}\n\nfunction getAltModePage() {\n  var page = null, c = {};\n  switch (c = iLOGlobal.constants.alt_mode, iLOGlobal.features.alt_mode) {\n   case c.HP:\n   case c.Enabled:\n    page = 'login.html';\n    break;\n\n   case c.ProfileError:\n    page = 'rebranding_profile_problem.html';\n    break;\n\n   case c.NANDError:\n    page = 'rebranding_nand_problem.html';\n    break;\n\n   default:\n    jQuery.log(\"index.html unknown alt_mode value=\" + alt_mode), page = 'login.html';\n  }\n  return page = 'html/' + page;\n}\n\nfunction showAltModeErrorCases(arg) {\n  var page = getAltModePage(), fromLogout = jQuery.isValidString(arg) && \"logout\" == arg ? !0 : !1;\n  if (fromLogout) {\n    document.body.rows = \"*,0,0,0\";\n    var appFrame = $(\"#appFrame\");\n    appFrame.attr('src').match(page) || appFrame.attr('src', baseURL + page);\n    try {\n      window.frames.appFrame.updateRebrandingProb();\n    } catch (e) {}\n  } else {\n    var newLoc = baseURL + page;\n    \"about:blank\" != modalFrame.location && modalFrame.location != newLoc && (document.body.rows = \"*,0,0,0\", \n    modalFrame.location.replace(newLoc));\n  }\n}\n\nfunction clearApplet() {\n  try {\n    frames.appletFrame.location.replace(baseURL + 'html/blank.html');\n  } catch (e) {}\n}\n\nfunction openSMH(targetURL) {\n  me.SMHwin = window.open(targetURL, \"SMH\");\n  try {\n    me.SMHwin.opener = null;\n  } catch (e) {\n    jQuery.log(\"error opening SMH \" + e.message);\n  }\n}\n\nvar baseURL = iLO.getBaseUrl();\n\n-1 !== baseURL.indexOf('/', baseURL.length - 1) && (baseURL = baseURL.substring(0, baseURL.length - 1)), \nbaseURL += encodeURI(window.location.pathname), baseURL = baseURL.substring(0, baseURL.lastIndexOf('/') + 1);\n\nvar sessionUrl = jQuery.cookies.get('sessionUrl');\n\nsessionUrl && \"\" != sessionUrl && sessionUrl == location.href ? (jQuery.cookies.set(\"sessionUrl\", \"\"), \nlocation.replace(encodeURI(location.href))) : jQuery.cookies.set(\"sessionUrl\", escape(location.href)), \nsessionUrl = jQuery.cookies.get('sessionUrl'), $(document).ready(function() {\n  iLO.init({\n    isApplication: !0\n  });\n  if (iLO.getCookie(\"sessionKey\") || iLOGlobal.cache.session_key) {\n    var alt_mode_cookie = parseInt(iLO.getCookie(\"altModeProb\"), 10);\n    alt_mode_cookie && iLO.setAltMode({\n      alt_mode: parseInt(alt_mode_cookie, 10)\n    }), iLOGlobal.features.alt_mode_en && iLOGlobal.features.alt_mode == iLOGlobal.constants.alt_mode.ProfileError ? showFWUpdate() : showApplication();\n  } else showLogin(\"fresh\");\n  clearApplet();\n});</script><!--<![endif]--><iframe name=appFrame id=appFrame frameborder=0 scrolling=no noresize=noresize style=display:none;width:100%;height:100% allowfullscreen=allowfullscreen webkitallowfullscreen mozallowfullscreen oallowfullscreen msallowfullscreen></iframe>\n<iframe name=ircFrame id=ircFrame frameborder=0 scrolling=no noresize=noresize style=display:none></iframe>\n</body>\n</html>",
+   "cert_text": "subject=CN=ILO---RB---P--Q, O=Hewlett Packard Enterprise, OU=ISS, L=Houston, ST=Texas, C=US\nissuer=CN=Default Issuer (Do not trust), O=Hewlett Packard Enterprise, OU=ISS, L=Houston, ST=Texas, C=US\nnotBefore=Jul 27 00:00:00 2022 GMT\nnotAfter=Jul 26 00:00:00 2037 GMT\nX509v3 Subject Alternative Name: \n    DNS:ILO---RB---P--Q\n"
+  },
+  {
+   "ip": "10.10.10.108",
+   "port": 80,
+   "scheme": "http",
+   "path": "/",
+   "status": 200,
+   "headers": [
+    [
+     "Date",
+     "Wed, 18 Nov 2026 05:46:36 GMT"
+    ],
+    [
+     "Server",
+     "Apache/2.4.68 (Debian)"
+    ],
+    [
+     "Last-Modified",
+     "Thu, 15 Oct 2026 05:32:00 GMT"
+    ],
+    [
+     "ETag",
+     "\"29cf-65dda5df0c41b\""
+    ],
+    [
+     "Accept-Ranges",
+     "bytes"
+    ],
+    [
+     "Content-Length",
+     "10703"
+    ],
+    [
+     "Vary",
+     "Accept-Encoding"
+    ],
+    [
+     "Content-Type",
+     "text/html"
+    ]
+   ],
+   "body": "\n<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\">\n<html xmlns=\"http://www.w3.org/1999/xhtml\">\n  <head>\n    <meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\" />\n    <title>Apache2 Debian Default Page: It works</title>\n    <style type=\"text/css\" media=\"screen\">\n  * {\n    margin: 0px 0px 0px 0px;\n    padding: 0px 0px 0px 0px;\n  }\n\n  body, html {\n    padding: 3px 3px 3px 3px;\n\n    background-color: #D8DBE2;\n\n    font-family: Verdana, sans-serif;\n    font-size: 11pt;\n    text-align: center;\n  }\n\n  div.main_page {\n    position: relative;\n    display: table;\n\n    width: 800px;\n\n    margin-bottom: 3px;\n    margin-left: auto;\n    margin-right: auto;\n    padding: 0px 0px 0px 0px;\n\n    border-width: 2px;\n    border-color: #212738;\n    border-style: solid;\n\n    background-color: #FFFFFF;\n\n    text-align: center;\n  }\n\n  div.page_header {\n    height: 99px;\n    width: 100%;\n\n    background-color: #F5F6F7;\n  }\n\n  div.page_header span {\n    margin: 15px 0px 0px 50px;\n\n    font-size: 180%;\n    font-weight: bold;\n  }\n\n  div.page_header img {\n    margin: 3px 0px 0px 40px;\n\n    border: 0px 0px 0px;\n  }\n\n  div.table_of_contents {\n    clear: left;\n\n    min-width: 200px;\n\n    margin: 3px 3px 3px 3px;\n\n    background-color: #FFFFFF;\n\n    text-align: left;\n  }\n\n  div.table_of_contents_item {\n    clear: left;\n\n    width: 100%;\n\n    margin: 4px 0px 0px 0px;\n\n    background-color: #FFFFFF;\n\n    color: #000000;\n    text-align: left;\n  }\n\n  div.table_of_contents_item a {\n    margin: 6px 0px 0px 6px;\n  }\n\n  div.content_section {\n    margin: 3px 3px 3px 3px;\n\n    background-color: #FFFFFF;\n\n    text-align: left;\n  }\n\n  div.content_section_text {\n    padding: 4px 8px 4px 8px;\n\n    color: #000000;\n    font-size: 100%;\n  }\n\n  div.content_section_text pre {\n    margin: 8px 0px 8px 0px;\n    padding: 8px 8px 8px 8px;\n\n    border-width: 1px;\n    border-style: dotted;\n    border-color: #000000;\n\n    background-color: #F5F6F7;\n\n    font-style: italic;\n  }\n\n  div.content_section_text p {\n    margin-bottom: 6px;\n  }\n\n  div.content_section_text ul, div.content_section_text li {\n    padding: 4px 8px 4px 16px;\n  }\n\n  div.section_header {\n    padding: 3px 6px 3px 6px;\n\n    background-color: #8E9CB2;\n\n    color: #FFFFFF;\n    font-weight: bold;\n    font-size: 112%;\n    text-align: center;\n  }\n\n  div.section_header_red {\n    background-color: #CD214F;\n  }\n\n  div.section_header_grey {\n    background-color: #9F9386;\n  }\n\n  .floating_element {\n    position: relative;\n    float: left;\n  }\n\n  div.table_of_contents_item a,\n  div.content_section_text a {\n    text-decoration: none;\n    font-weight: bold;\n  }\n\n  div.table_of_contents_item a:link,\n  div.table_of_contents_item a:visited,\n  div.table_of_contents_item a:active {\n    color: #000000;\n  }\n\n  div.table_of_contents_item a:hover {\n    background-color: #000000;\n\n    color: #FFFFFF;\n  }\n\n  div.content_section_text a:link,\n  div.content_section_text a:visited,\n   div.content_section_text a:active {\n    background-color: #DCDFE6;\n\n    color: #000000;\n  }\n\n  div.content_section_text a:hover {\n    background-color: #000000;\n\n    color: #DCDFE6;\n  }\n\n  div.validator {\n  }\n    </style>\n  </head>\n  <body>\n    <div class=\"main_page\">\n      <div class=\"page_header floating_element\">\n        <img src=\"/icons/openlogo-75.png\" alt=\"Debian Logo\" class=\"floating_element\"/>\n        <span class=\"floating_element\">\n          Apache2 Debian Default Page\n        </span>\n      </div>\n<!--      <div class=\"table_of_contents floating_element\">\n        <div class=\"section_header section_header_grey\">\n          TABLE OF CONTENTS\n        </div>\n        <div class=\"table_of_contents_item floating_element\">\n          <a href=\"#about\">About</a>\n        </div>\n        <div class=\"table_of_contents_item floating_element\">\n          <a href=\"#changes\">Changes</a>\n        </div>\n        <div class=\"table_of_contents_item floating_element\">\n          <a href=\"#scope\">Scope</a>\n        </div>\n        <div class=\"table_of_contents_item floating_element\">\n          <a href=\"#files\">Config files</a>\n        </div>\n      </div>\n-->\n      <div class=\"content_section floating_element\">\n\n\n        <div class=\"section_header section_header_red\">\n          <div id=\"about\"></div>\n          It works!\n        </div>\n        <div class=\"content_section_text\">\n          <p>\n                This is the default welcome page used to test the correct \n                operation of the Apache2 server after installation on Debian systems.\n                If you can read this page, it means that the Apache HTTP server installed at\n                this site is working properly. You should <b>replace this file</b> (located at\n                <tt>/var/www/html/index.html</tt>) before continuing to operate your HTTP server.\n          </p>\n\n\n          <p>\n                If you are a normal user of this web site and don't know what this page is\n                about, this probably means that the site is currently unavailable due to\n                maintenance.\n                If the problem persists, please contact the site's administrator.\n          </p>\n\n        </div>\n        <div class=\"section_header\">\n          <div id=\"changes\"></div>\n                Configuration Overview\n        </div>\n        <div class=\"content_section_text\">\n          <p>\n                Debian's Apache2 default configuration is different from the\n                upstream default configuration, and split into several files optimized for\n                interaction with Debian tools. The configuration system is\n                <b>fully documented in\n                /usr/share/doc/apache2/README.Debian.gz</b>. Refer to this for the full\n                documentation. Documentation for the web server itself can be\n                found by accessing the <a href=\"/manual\">manual</a> if the <tt>apache2-doc</tt>\n                package was installed on this server.\n\n          </p>\n          <p>\n                The configuration layout for an Apache2 web server installation on Debian systems is as follows:\n          </p>\n          <pre>\n/etc/apache2/\n|-- apache2.conf\n|       `--  ports.conf\n|-- mods-enabled\n|       |-- *.load\n|       `-- *.conf\n|-- conf-enabled\n|       `-- *.conf\n|-- sites-enabled\n|       `-- *.conf\n          </pre>\n          <ul>\n                        <li>\n                           <tt>apache2.conf</tt> is the main configuration\n                           file. It puts the pieces together by including all remaining configuration\n                           files when starting up the web server.\n                        </li>\n\n                        <li>\n                           <tt>ports.conf</tt> is always included from the\n                           main configuration file. It is used to determine the listening ports for\n                           incoming connections, and this file can be customized anytime.\n                        </li>\n\n                        <li>\n                           Configuration files in the <tt>mods-enabled/</tt>,\n                           <tt>conf-enabled/</tt> and <tt>sites-enabled/</tt> directories contain\n                           particular configuration snippets which manage modules, global configuration\n                           fragments, or virtual host configurations, respectively.\n                        </li>\n\n                        <li>\n                           They are activated by symlinking available\n                           configuration files from their respective\n                           *-available/ counterparts. These should be managed\n                           by using our helpers\n                           <tt>\n                                a2enmod,\n                                a2dismod,\n                           </tt>\n                           <tt>\n                                a2ensite,\n                                a2dissite,\n                            </tt>\n                                and\n                           <tt>\n                                a2enconf,\n                                a2disconf\n                           </tt>. See their respective man pages for detailed information.\n                        </li>\n\n                        <li>\n                           The binary is called apache2. Due to the use of\n                           environment variables, in the default configuration, apache2 needs to be\n                           started/stopped with <tt>/etc/init.d/apache2</tt> or <tt>apache2ctl</tt>.\n                           <b>Calling <tt>/usr/bin/apache2</tt> directly will not work</b> with the\n                           default configuration.\n                        </li>\n          </ul>\n        </div>\n\n        <div class=\"section_header\">\n            <div id=\"docroot\"></div>\n                Document Roots\n        </div>\n\n        <div class=\"content_section_text\">\n            <p>\n                By default, Debian does not allow access through the web browser to\n                <em>any</em> file apart of those located in <tt>/var/www</tt>,\n                <a href=\"https://httpd.apache.org/docs/2.4/mod/mod_userdir.html\" rel=\"nofollow\">public_html</a>\n                directories (when enabled) and <tt>/usr/share</tt> (for web\n                applications). If your site is using a web document root\n                located elsewhere (such as in <tt>/srv</tt>) you may need to whitelist your\n                document root directory in <tt>/etc/apache2/apache2.conf</tt>.\n            </p>\n            <p>\n                The default Debian document root is <tt>/var/www/html</tt>. You\n                can make your own virtual hosts under /var/www. This is different\n                to previous releases which provides better security out of the box.\n            </p>\n        </div>\n\n        <div class=\"section_header\">\n          <div id=\"bugs\"></div>\n                Reporting Problems\n        </div>\n        <div class=\"content_section_text\">\n          <p>\n                Please use the <tt>reportbug</tt> tool to report bugs in the\n                Apache2 package with Debian. However, check <a\n                href=\"https://bugs.debian.org/cgi-bin/pkgreport.cgi?ordering=normal;archive=0;src=apache2;repeatmerged=0\"\n                rel=\"nofollow\">existing bug reports</a> before reporting a new bug.\n          </p>\n          <p>\n                Please report bugs specific to modules (such as PHP and others)\n                to respective packages, not to the web server itself.\n          </p>\n        </div>\n\n\n\n\n      </div>\n    </div>\n    <div class=\"validator\">\n    </div>\n  </body>\n</html>\n\n"
+  },
+  {
+   "ip": "10.10.10.25",
+   "port": 80,
+   "scheme": "http",
+   "path": "/",
+   "status": 200,
+   "headers": [
+    [
+     "Content-Type",
+     "text/html"
+    ],
+    [
+     "Date",
+     "Wed, 18 Nov 2026 05:46:36 GMT"
+    ],
+    [
+     "Transfer-Encoding",
+     "chunked"
+    ]
+   ],
+   "body": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n    <meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, shrink-to-fit=no\">\n    <meta name=\"theme-color\" content=\"#3f51b5\">\n    <link rel=\"manifest\" href=\"manifest.json\">\n    <title>Gotify</title>\n\n    <link rel=\"apple-touch-icon-precomposed\" sizes=\"57x57\" href=\"static/apple-touch-icon-57x57.png\" />\n    <link rel=\"apple-touch-icon-precomposed\" sizes=\"114x114\" href=\"static/apple-touch-icon-114x114.png\" />\n    <link rel=\"apple-touch-icon-precomposed\" sizes=\"72x72\" href=\"static/apple-touch-icon-72x72.png\" />\n    <link rel=\"apple-touch-icon-precomposed\" sizes=\"144x144\" href=\"static/apple-touch-icon-144x144.png\" />\n    <link rel=\"apple-touch-icon-precomposed\" sizes=\"60x60\" href=\"static/apple-touch-icon-60x60.png\" />\n    <link rel=\"apple-touch-icon-precomposed\" sizes=\"120x120\" href=\"static/apple-touch-icon-120x120.png\" />\n    <link rel=\"apple-touch-icon-precomposed\" sizes=\"76x76\" href=\"static/apple-touch-icon-76x76.png\" />\n    <link rel=\"apple-touch-icon-precomposed\" sizes=\"152x152\" href=\"static/apple-touch-icon-152x152.png\" />\n    <link rel=\"icon\" type=\"image/png\" href=\"static/favicon-196x196.png\" sizes=\"196x196\" />\n    <link rel=\"icon\" type=\"image/png\" href=\"static/favicon-96x96.png\" sizes=\"96x96\" />\n    <link rel=\"icon\" type=\"image/png\" href=\"static/favicon-32x32.png\" sizes=\"32x32\" />\n    <link rel=\"icon\" type=\"image/png\" href=\"static/favicon-16x16.png\" sizes=\"16x16\" />\n    <link rel=\"icon\" type=\"image/png\" href=\"static/favicon-128.png\" sizes=\"128x128\" />\n    <link rel=\"icon\" href=\"static/favicon.ico\">\n    <meta name=\"application-name\" content=\"Gotify\"/>\n    <meta name=\"msapplication-TileColor\" content=\"#FFFFFF\" />\n    <meta name=\"msapplication-TileImage\" content=\"static/mstile-144x144.png\" />\n    <meta name=\"msapplication-square70x70logo\" content=\"static/mstile-70x70.png\" />\n    <meta name=\"msapplication-square150x150logo\" content=\"static/mstile-150x150.png\" />\n    <meta name=\"msapplication-wide310x150logo\" content=\"static/mstile-310x150.png\" />\n    <meta name=\"msapplication-square310x310logo\" content=\"static/mstile-310x310.png\" />\n\n  <script type=\"module\" crossorigin src=\"./static/index-DLqCjME9.js\"></script>\n  <link rel=\"stylesheet\" crossorigin href=\"./static/index-BDMh_36D.css\">\n</head>\n<body>\n<noscript>\n    Gotify requires JavaScript.\n</noscript>\n<div id=\"root\"></div>\n<script>window.config = {\"register\":false,\"version\":{\"version\":\"3.0.0\",\"commit\":\"497f9459d2bc54b432131444f4c56dd3e1d609fa\",\"buildDate\":\"2026-07-18-12:42:02\"},\"oidc\":false};</script>\n</body>\n</html>\n"
+  },
+  {
+   "ip": "10.10.10.33",
+   "port": 3000,
+   "scheme": "http",
+   "path": "/",
+   "status": 200,
+   "headers": [
+    [
+     "Accept-Ranges",
+     "bytes"
+    ],
+    [
+     "Content-Length",
+     "815"
+    ],
+    [
+     "Content-Type",
+     "text/html; charset=utf-8"
+    ],
+    [
+     "Last-Modified",
+     "Mon, 12 Oct 2026 20:08:44 GMT"
+    ],
+    [
+     "Date",
+     "Wed, 18 Nov 2026 05:46:36 GMT"
+    ]
+   ],
+   "body": "<!DOCTYPE html>\n<html lang=\"en\">\n  <head>\n    <base href=\"/\">\n    <meta charset=\"utf-8\">\n    <meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge\">\n    <meta name=\"viewport\" content=\"width=device-width,initial-scale=1.0\">\n    <link rel=\"icon\" href=\"favicon.png\">\n    <title>Dashboard - Semaphore UI</title>\n  <script defer src=\"js/chunk-vendors.0e6e338f.js\"></script><script defer src=\"js/app.87cd5f9e.js\"></script><link href=\"css/chunk-vendors.b0f5900c.css\" rel=\"stylesheet\"><link href=\"css/app.03b1a7d2.css\" rel=\"stylesheet\"></head>\n  <body>\n    <noscript>\n      <strong>\n          We're sorry but web doesn't work properly\n          without JavaScript enabled. Please enable it to continue.\n      </strong>\n    </noscript>\n    <div id=\"app\"></div>\n    <!-- built files will be auto injected -->\n  </body>\n</html>\n"
+  },
+  {
+   "ip": "10.10.10.13",
+   "port": 443,
+   "scheme": "https",
+   "path": "/",
+   "status": 200,
+   "headers": [
+    [
+     "Server",
+     "nginx"
+    ],
+    [
+     "Date",
+     "Wed, 18 Nov 2026 05:46:38 GMT"
+    ],
+    [
+     "Content-Type",
+     "text/html; charset=utf-8"
+    ],
+    [
+     "Transfer-Encoding",
+     "chunked"
+    ],
+    [
+     "Connection",
+     "keep-alive"
+    ],
+    [
+     "Vary",
+     "Accept-Encoding"
+    ],
+    [
+     "Vary",
+     "Cookie"
+    ]
+   ],
+   "body": "<!doctype html>\n<html lang=\"en\" class=\"dark\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <link rel=\"icon\" type=\"image/x-icon\" href=\"data:,\" />\n    <link rel=\"apple-touch-icon\" href=\"/apple-touch-icon.png\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover\" />\n    <meta name=\"apple-mobile-web-app-capable\" content=\"yes\" />\n    <meta name=\"mobile-web-app-capable\" content=\"yes\" />\n    <meta name=\"apple-mobile-web-app-status-bar-style\" content=\"black-translucent\" />\n    <title>qui</title>\n    <link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">\n    <link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>\n    <script>\n      /* Anti-FOUC: Apply theme immediately before render */\n      (function() {\n        try {\n          // Check if current theme is lightOnly (e.g., Napster)\n          var isLightOnly = localStorage.getItem('theme-light-only') === 'true';\n\n          // Get stored theme preferences\n          var themeMode = localStorage.getItem('theme') || 'auto';\n          var isDark = !isLightOnly && (themeMode === 'dark' ||\n                       (themeMode === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches));\n\n          // Apply dark class if needed\n          if (isDark) {\n            document.documentElement.classList.add('dark');\n          } else {\n            document.documentElement.classList.remove('dark');\n          }\n\n          // Set immediate background to prevent flash\n          // Default to minimal theme dark background\n          document.documentElement.style.backgroundColor = isDark ? 'oklch(0.1450 0 0)' : 'oklch(0.98 0 0)';\n          document.body && (document.body.style.backgroundColor = isDark ? 'oklch(0.1450 0 0)' : 'oklch(0.98 0 0)');\n\n          // Check if we have stored critical theme vars for more accurate color\n          var criticalVars = localStorage.getItem('theme-critical-vars');\n          if (criticalVars) {\n            try {\n              var vars = JSON.parse(criticalVars);\n              if (vars.background) {\n                document.documentElement.style.backgroundColor = vars.background;\n                document.body && (document.body.style.backgroundColor = vars.background);\n              }\n            } catch(e) {}\n          }\n        } catch (e) {\n          // Fallback to dark theme on error\n          document.documentElement.style.backgroundColor = 'oklch(0.1450 0 0)';\n        }\n      })();\n    </script>\n    <script type=\"module\" crossorigin src=\"/assets/index-BRU2GQtP.js\"></script>\n    <link rel=\"modulepreload\" crossorigin href=\"/assets/rolldown-runtime-CNC7AqOf.js\">\n    <link rel=\"modulepreload\" crossorigin href=\"/assets/react-vendor-CCHF6sif.js\">\n    <link rel=\"modulepreload\" crossorigin href=\"/assets/ui-vendor-4r5kk0qw.js\">\n    <link rel=\"modulepreload\" crossorigin href=\"/assets/tanstack-7ksNQ13O.js\">\n    <link rel=\"stylesheet\" crossorigin href=\"/assets/index-C98SmMLY.css\">\n  <link rel=\"manifest\" href=\"/manifest.webmanifest\"><script>window.__QUI_BASE_URL__=\"/\";window.__QUI_VERSION__=\"v1.23.0\";</script></head>\n  <body>\n    <div id=\"root\"></div>\n  </body>\n</html>\n",
+   "cert_text": "subject=CN=torrent.home\nissuer=CN=MyHomeCA\nnotBefore=Mar  5 20:49:10 2026 GMT\nnotAfter=Mar  5 20:49:10 2027 GMT\nX509v3 Subject Alternative Name: \n    DNS:torrent.home\n"
+  },
+  {
+   "ip": "10.10.10.34",
+   "port": 443,
+   "scheme": "https",
+   "path": "/",
+   "error": "TimeoutError('timed out')",
+   "headers": []
+  },
+  {
+   "ip": "10.10.10.127",
+   "port": 8080,
+   "scheme": "http",
+   "path": "/",
+   "status": 200,
+   "headers": [
+    [
+     "Cache-Control",
+     "no-cache"
+    ],
+    [
+     "Content-Type",
+     "text/html; charset=utf-8"
+    ],
+    [
+     "Date",
+     "Wed, 18 Nov 2026 05:46:43 GMT"
+    ],
+    [
+     "Content-Length",
+     "522"
+    ]
+   ],
+   "body": "<!doctype html>\n<html lang=\"en\" data-theme=\"dark\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <meta name=\"referrer\" content=\"no-referrer\" />\n    <link rel=\"icon\" type=\"image/svg+xml\" href=\"/favicon.svg\" />\n    <title>Iris</title>\n    <script type=\"module\" crossorigin src=\"/assets/index-C0Ix4Bhw.js\"></script>\n    <link rel=\"stylesheet\" crossorigin href=\"/assets/index-BVOdBxBg.css\">\n  </head>\n  <body>\n    <div id=\"app\"></div>\n  </body>\n</html>\n"
+  },
+  {
+   "ip": "10.10.10.40",
+   "port": 9001,
+   "scheme": "http",
+   "path": "/",
+   "status": 403,
+   "headers": [
+    [
+     "content-type",
+     "application/xml"
+    ],
+    [
+     "x-request-id",
+     "f76859f4-09bc-473f-ac53-08aa826ddf87"
+    ],
+    [
+     "x-amz-request-id",
+     "f76859f4-09bc-473f-ac53-08aa826ddf87"
+    ],
+    [
+     "content-length",
+     "110"
+    ],
+    [
+     "date",
+     "Wed, 18 Nov 2026 05:46:43 GMT"
+    ]
+   ],
+   "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Error><Code>AccessDenied</Code><Message>Access Denied</Message></Error>"
+  },
+  {
+   "ip": "10.10.10.23",
+   "port": 80,
+   "scheme": "http",
+   "path": "/",
+   "status": 200,
+   "headers": [
+    [
+     "Server",
+     "nginx"
+    ],
+    [
+     "Date",
+     "Wed, 18 Nov 2026 05:46:44 GMT"
+    ],
+    [
+     "Content-Type",
+     "text/html"
+    ],
+    [
+     "Content-Length",
+     "615"
+    ],
+    [
+     "Last-Modified",
+     "Mon, 09 Mar 2026 15:35:46 GMT"
+    ],
+    [
+     "Connection",
+     "keep-alive"
+    ],
+    [
+     "ETag",
+     "\"69aee8d2-267\""
+    ],
+    [
+     "Accept-Ranges",
+     "bytes"
+    ]
+   ],
+   "body": "<!DOCTYPE html>\n<html>\n<head>\n<title>Welcome to nginx!</title>\n<style>\nhtml { color-scheme: light dark; }\nbody { width: 35em; margin: 0 auto;\nfont-family: Tahoma, Verdana, Arial, sans-serif; }\n</style>\n</head>\n<body>\n<h1>Welcome to nginx!</h1>\n<p>If you see this page, the nginx web server is successfully installed and\nworking. Further configuration is required.</p>\n\n<p>For online documentation and support please refer to\n<a href=\"http://nginx.org/\">nginx.org</a>.<br/>\nCommercial support is available at\n<a href=\"http://nginx.com/\">nginx.com</a>.</p>\n\n<p><em>Thank you for using nginx.</em></p>\n</body>\n</html>\n"
+  },
+  {
+   "ip": "10.10.10.38",
+   "port": 3000,
+   "scheme": "http",
+   "path": "/",
+   "status": 400,
+   "headers": [
+    [
+     "content-type",
+     "application/json"
+    ],
+    [
+     "Vary",
+     "Accept-Encoding"
+    ],
+    [
+     "Date",
+     "Wed, 18 Nov 2026 05:46:44 GMT"
+    ],
+    [
+     "Connection",
+     "keep-alive"
+    ],
+    [
+     "Keep-Alive",
+     "timeout=5"
+    ],
+    [
+     "Transfer-Encoding",
+     "chunked"
+    ]
+   ],
+   "body": "{\"error\":\"Host validation failed. See logs for more details.\"}"
+  },
+  {
+   "ip": "10.10.10.16",
+   "port": 3000,
+   "scheme": "http",
+   "path": "/",
+   "status": 200,
+   "headers": [
+    [
+     "access-control-allow-origin",
+     "*"
+    ],
+    [
+     "accept-ranges",
+     "bytes"
+    ],
+    [
+     "cache-control",
+     "public, max-age=0"
+    ],
+    [
+     "last-modified",
+     "Tue, 17 Nov 2026 01:08:03 GMT"
+    ],
+    [
+     "etag",
+     "W/\"674-1a1e70bf72c\""
+    ],
+    [
+     "content-type",
+     "text/html; charset=utf-8"
+    ],
+    [
+     "content-length",
+     "1652"
+    ],
+    [
+     "x-frame-options",
+     "SAMEORIGIN"
+    ],
+    [
+     "Date",
+     "Wed, 18 Nov 2026 05:46:44 GMT"
+    ],
+    [
+     "Connection",
+     "keep-alive"
+    ],
+    [
+     "Keep-Alive",
+     "timeout=72"
+    ]
+   ],
+   "body": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <link rel=\"icon\" type=\"image/png\" sizes=\"32x32\" href=\"/icons/favicon-32x32.png\" />\n    <link rel=\"icon\" type=\"image/png\" sizes=\"16x16\" href=\"/icons/favicon-16x16.png\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0 user-scalable=no\" />\n    <title>Docmost</title>\n    <meta name=\"theme-color\" content=\"#1f1f1f\" media=\"(prefers-color-scheme: dark)\" />\n    <meta name=\"theme-color\" content=\"#f6f7f9\" media=\"(prefers-color-scheme: light)\" />\n    <link rel=\"manifest\" href=\"/manifest.json\" />\n    <meta name=\"mobile-web-app-capable\" content=\"yes\" />\n    <meta name=\"apple-touch-fullscreen\" content=\"yes\" />\n    <meta name=\"apple-mobile-web-app-title\" content=\"Docmost\" />\n    <meta name=\"apple-mobile-web-app-capable\" content=\"yes\" />\n    <meta name=\"apple-mobile-web-app-status-bar-style\" content=\"default\" />\n    <!--meta-tags-->\n    <script type=\"module\" crossorigin src=\"/assets/index-BgC9hh6t.js\"></script>\n    <link rel=\"modulepreload\" crossorigin href=\"/assets/rolldown-runtime-aKtaBQYM.js\">\n    <link rel=\"modulepreload\" crossorigin href=\"/assets/vendor-mantine-Cxq-_z9h.js\">\n    <link rel=\"modulepreload\" crossorigin href=\"/assets/shim-CF1XpAW2.js\">\n    <link rel=\"stylesheet\" crossorigin href=\"/assets/vendor-mantine-CCV7iihW.css\">\n    <link rel=\"stylesheet\" crossorigin href=\"/assets/index-Tl-UWoIA.css\">\n  </head>\n  <body>\n    <div id=\"root\"></div>\n\n    <script>window.CONFIG={\"ENV\":\"production\",\"APP_URL\":\"http://docmost.home:3000\",\"CLOUD\":false,\"FILE_UPLOAD_SIZE_LIMIT\":\"50mb\",\"FILE_IMPORT_SIZE_LIMIT\":\"200mb\"};</script>\n\n  </body>\n</html>\n"
+  },
+  {
+   "ip": "10.10.10.3",
+   "port": 80,
+   "scheme": "http",
+   "path": "/",
+   "status": 200,
+   "headers": [
+    [
+     "Connection",
+     "close"
+    ],
+    [
+     "ETag",
+     "\"12c-110-64d15b8e\""
+    ],
+    [
+     "Last-Modified",
+     "Mon, 07 Aug 2023 21:01:02 GMT"
+    ],
+    [
+     "Date",
+     "Mon, 19 Feb 2024 16:21:47 GMT"
+    ],
+    [
+     "Cache-Control",
+     "no-cache"
+    ],
+    [
+     "Expires",
+     "0"
+    ],
+    [
+     "Content-Type",
+     "text/html"
+    ],
+    [
+     "Content-Length",
+     "272"
+    ]
+   ],
+   "body": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.1//EN\" \"http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd\">\n<html xmlns=\"http://www.w3.org/1999/xhtml\">\n<head>\n<meta http-equiv=\"refresh\" content=\"0; URL=/webpages/login.html\" />\n</head>\n</html>\n"
+  },
+  {
+   "ip": "10.10.10.30",
+   "port": 443,
+   "scheme": "https",
+   "path": "/",
+   "status": 302,
+   "headers": [
+    [
+     "Server",
+     "nginx"
+    ],
+    [
+     "Date",
+     "Wed, 18 Nov 2026 05:46:44 GMT"
+    ],
+    [
+     "Content-Type",
+     "text/plain; charset=utf-8"
+    ],
+    [
+     "Content-Length",
+     "37"
+    ],
+    [
+     "Connection",
+     "keep-alive"
+    ],
+    [
+     "Content-Security-Policy",
+     "default-src 'self';script-src 'self';style-src 'self' 'unsafe-inline';font-src 'self';connect-src 'self';img-src 'self' data:;base-uri 'self';form-action 'self';frame-ancestors 'self';object-src 'none';script-src-attr 'none'"
+    ],
+    [
+     "Cross-Origin-Opener-Policy",
+     "same-origin"
+    ],
+    [
+     "Cross-Origin-Resource-Policy",
+     "same-origin"
+    ],
+    [
+     "Origin-Agent-Cluster",
+     "?1"
+    ],
+    [
+     "Referrer-Policy",
+     "no-referrer"
+    ],
+    [
+     "X-Content-Type-Options",
+     "nosniff"
+    ],
+    [
+     "X-DNS-Prefetch-Control",
+     "off"
+    ],
+    [
+     "X-Download-Options",
+     "noopen"
+    ],
+    [
+     "X-Frame-Options",
+     "SAMEORIGIN"
+    ],
+    [
+     "X-Permitted-Cross-Domain-Policies",
+     "none"
+    ],
+    [
+     "X-XSS-Protection",
+     "0"
+    ],
+    [
+     "RateLimit-Policy",
+     "100;w=60"
+    ],
+    [
+     "RateLimit-Limit",
+     "100"
+    ],
+    [
+     "RateLimit-Remaining",
+     "99"
+    ],
+    [
+     "RateLimit-Reset",
+     "60"
+    ],
+    [
+     "Location",
+     "/login?next=%2F"
+    ],
+    [
+     "Vary",
+     "Accept, Accept-Encoding"
+    ]
+   ],
+   "body": "Found. Redirecting to /login?next=%2F",
+   "cert_text": "subject=CN=mikrotik-dash.home\nissuer=CN=MyHomeCA\nnotBefore=May 16 08:51:57 2026 GMT\nnotAfter=May 16 08:51:57 2027 GMT\nX509v3 Subject Alternative Name: \n    DNS:mikrotik-dash.home\n"
+  }
+ ],
+ "ssh": [
+  {
+   "ip": "10.10.10.10",
+   "port": 22,
+   "banner": "SSH-2.0-OpenSSH_10.0p2 Debian-7+deb13u4\r\n"
+  },
+  {
+   "ip": "10.10.10.33",
+   "port": 22,
+   "banner": "SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.18\r\n"
+  },
+  {
+   "ip": "10.10.10.3",
+   "port": 22,
+   "banner": "SSH-2.0-dropbear_2011.54\r\n"
+  },
+  {
+   "ip": "10.10.10.36",
+   "port": 22,
+   "banner": "SSH-2.0-mpSSH_0.2.1\r\n"
+  },
+  {
+   "ip": "10.10.10.1",
+   "port": 2222,
+   "banner": "SSH-2.0-ROSSSH\r\n"
+  },
+  {
+   "ip": "10.10.10.2",
+   "port": 22,
+   "banner": "SSH-2.0-ROSSSH\r\n"
+  }
+ ]
+}
