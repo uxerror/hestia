@@ -2,6 +2,7 @@
   import { api } from '../lib/api.js';
   import { session } from '../lib/session.svelte.js';
   import { movedView } from '../lib/selfinstall.js';
+  import { addressLine } from '../lib/dnsname.js';
   import { Flame, ExternalLink, RefreshCw } from 'lucide-svelte';
 
   let remote = $state(null);
@@ -30,6 +31,7 @@
     <div class="card-body gap-3">
       <h1 class="card-title text-primary"><Flame size={22} /> Hestia</h1>
       <p data-testid="moved-text">Hestia работает на <a class="link font-mono" href={url}>{url}</a>.</p>
+      {#if remote?.fallback_url}<p class="text-xs opacity-70" data-testid="moved-address">{addressLine(remote)}</p>{/if}
       <p class="text-sm opacity-70" data-testid="moved-state">{view.text}</p>
       <div class="flex gap-2">
         <a class="btn btn-primary" href={url} data-testid="moved-open"><ExternalLink size={16} /> Открыть</a>

@@ -18,6 +18,7 @@ import (
 	"hestia/internal/api"
 	"hestia/internal/auth"
 	"hestia/internal/desktop"
+	"hestia/internal/dnsname"
 	"hestia/internal/inventory"
 	"hestia/internal/jobs"
 	"hestia/internal/netscan"
@@ -82,6 +83,7 @@ type app struct {
 	stopInv context.CancelFunc
 	inv     *inventory.Service
 	net     *netscan.Manager
+	dns     *dnsname.Service
 	gate    *selfinstall.Gate
 	remote  *selfinstall.Remote // set when started in "moved" mode (no database)
 }
@@ -93,6 +95,7 @@ func (a *app) close() {
 	a.stopInv()
 	a.inv.Wait()
 	a.net.Wait()
+	a.dns.Wait()
 	a.runner.Shutdown()
 	_ = a.store.Close()
 }
@@ -158,15 +161,23 @@ func newApp(ctx context.Context, dataDir, mode string) (*app, error) {
 		Store: st, Secrets: sec, Runner: runner, Identity: id, Gate: gate, DataDir: dataDir, Version: version,
 		OnSwitched: stopInv,
 	}).Init()
+	dns := (&dnsname.Service{
+		Store: st, Secrets: sec, Runner: runner, Hosts: nm, InstanceID: instanceID,
+		Local: func(ctx context.Context) bool {
+			state, err := si.State(ctx)
+			return err == nil && state.State == "local"
+		},
+	}).Init()
+	dns.Start(invCtx)
 	up := (&update.Service{Store: st, Runner: runner, DataDir: dataDir, Version: version, Self: si}).Init()
 	up.CleanTemp()
 	up.StartChecks(invCtx)
 	h := api.New(api.Config{
-		Store: st, Auth: auth.New(st), Runner: runner, Onboard: ob, Inventory: inv, Netscan: nm, Identity: id,
+		Store: st, Auth: auth.New(st), Runner: runner, Onboard: ob, Inventory: inv, Netscan: nm, DNS: dns, Identity: id,
 		Selfinstall: si, Gate: gate, Update: up, InstanceID: instanceID,
 		Web: web.Dist(), Mode: mode, Version: version,
 	})
-	return &app{store: st, runner: runner, handler: h, stopInv: stopInv, inv: inv, net: nm, gate: gate}, nil
+	return &app{store: st, runner: runner, handler: h, stopInv: stopInv, inv: inv, net: nm, dns: dns, gate: gate}, nil
 }
 
 func cmdServe(args []string) int {
@@ -231,10 +242,10 @@ func cmdDesktop(args []string) int {
 	if a.remote != nil {
 		// Moved: open the remote controller directly if it answers; otherwise
 		// the window shows the local "moved" screen, which can retry.
-		ctx, cancel := context.WithTimeout(context.Background(), selfinstall.CheckTimeout+time.Second)
-		if selfinstall.CheckRemote(ctx, *a.remote) {
-			start = a.remote.URL
-			if u, stop := offerUpdate(ctx, *a.remote, version); u != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 4*selfinstall.CheckTimeout)
+		if rem, ok := selfinstall.ResolveStart(ctx, *data, *a.remote, selfinstall.StartOptions{}); ok {
+			start = rem.URL
+			if u, stop := offerUpdate(ctx, rem, version); u != "" {
 				start = u
 				defer stop()
 			}

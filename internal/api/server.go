@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"hestia/internal/auth"
+	"hestia/internal/dnsname"
 	"hestia/internal/inventory"
 	"hestia/internal/jobs"
 	"hestia/internal/netscan"
@@ -37,6 +38,8 @@ type Config struct {
 	// transfer/moved modes (both optional in tests).
 	Selfinstall *selfinstall.Service
 	Gate        *selfinstall.Gate
+	// DNS gives the controller a name through AdGuard Home (optional in tests).
+	DNS *dnsname.Service
 	// Update updates the installed controller (optional in tests).
 	Update     *update.Service
 	InstanceID string
@@ -90,6 +93,17 @@ func New(cfg Config) http.Handler {
 		mux.HandleFunc("DELETE /api/v1/network/scan", s.requireAuth(s.networkCancel))
 		mux.HandleFunc("PUT /api/v1/network/settings", s.requireAuth(s.networkSettings))
 		mux.HandleFunc("DELETE /api/v1/network/hosts/{ip}", s.requireAuth(s.networkForget))
+	}
+
+	if cfg.DNS != nil {
+		mux.HandleFunc("GET /api/v1/dns", s.requireAuth(s.dnsView))
+		mux.HandleFunc("POST /api/v1/dns/adguard/probe", s.requireAuth(s.dnsProbe))
+		mux.HandleFunc("POST /api/v1/dns/adguard", s.requireAuth(s.dnsConnect(false)))
+		mux.HandleFunc("PUT /api/v1/dns/adguard", s.requireAuth(s.dnsConnect(true)))
+		mux.HandleFunc("DELETE /api/v1/dns/adguard", s.requireAuth(s.dnsDisconnect))
+		mux.HandleFunc("POST /api/v1/dns/plan", s.requireAuth(s.dnsPlan))
+		mux.HandleFunc("POST /api/v1/dns/apply", s.requireAuth(s.dnsApply))
+		mux.HandleFunc("POST /api/v1/dns/check", s.requireAuth(s.dnsCheck))
 	}
 
 	if cfg.Selfinstall != nil {

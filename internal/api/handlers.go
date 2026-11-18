@@ -27,9 +27,17 @@ type credentials struct {
 }
 
 func (s *server) health(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
+	h := map[string]any{
 		"status": "ok", "version": s.Version, "instance_id": s.InstanceID, "transferring": s.Gate.Transferring(),
-	})
+	}
+	// The name is public information (the desktop app switches to it); it is
+	// only announced while it is verified and healthy.
+	if s.DNS != nil {
+		if u := s.DNS.PublicURL(r.Context()); u != "" {
+			h["dns_url"] = u
+		}
+	}
+	writeJSON(w, http.StatusOK, h)
 }
 
 func (s *server) setupStatus(w http.ResponseWriter, r *http.Request) {

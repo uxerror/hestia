@@ -11,6 +11,8 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/netip"
+	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -19,6 +21,7 @@ import (
 
 	"hestia/internal/api"
 	"hestia/internal/auth"
+	"hestia/internal/dnsname"
 	"hestia/internal/inventory"
 	"hestia/internal/jobs"
 	"hestia/internal/netscan"
@@ -33,6 +36,7 @@ type env struct {
 	runner *jobs.Runner
 	store  *store.Store
 	net    *netscan.Manager
+	dns    *dnsname.Service
 }
 
 func newEnv(t *testing.T) *env {
@@ -59,17 +63,22 @@ func newEnv(t *testing.T) *env {
 	// The scanner never touches a network: every connect fails at once.
 	nm := (&netscan.Manager{Store: st, Runner: runner, Inventory: inv, Version: "test",
 		Scanner: &netscan.Scanner{Dialer: noNet{}}}).Init()
+	dns := (&dnsname.Service{Store: st, Secrets: sec, Runner: runner, Hosts: nm, InstanceID: "inst-test",
+		DNSAttempts: 2, DNSPause: time.Millisecond}).Init()
 	h := api.New(api.Config{
-		Store: st, Auth: auth.New(st), Runner: runner, Onboard: ob, Inventory: inv, Netscan: nm, Identity: id, Mode: "serve", Version: "test",
+		Store: st, Auth: auth.New(st), Runner: runner, Onboard: ob, Inventory: inv, Netscan: nm, DNS: dns, InstanceID: "inst-test", Identity: id, Mode: "serve", Version: "test",
 		Web: fstest.MapFS{
 			"index.html":    {Data: []byte("<html>spa</html>")},
 			"assets/app.js": {Data: []byte("console.log(1)")},
 		},
 	})
 	srv := httptest.NewServer(h)
+	if u, err := url.Parse(srv.URL); err == nil {
+		dns.HealthPort, _ = strconv.Atoi(u.Port()) // the name is checked against this very server
+	}
 	jar, _ := cookiejar.New(nil)
 	t.Cleanup(func() { srv.Close(); runner.Shutdown(); _ = st.Close() })
-	return &env{srv: srv, client: &http.Client{Jar: jar}, runner: runner, store: st, net: nm}
+	return &env{srv: srv, client: &http.Client{Jar: jar}, runner: runner, store: st, net: nm, dns: dns}
 }
 
 // noNet is a Dialer on which nothing is reachable: every connect fails after

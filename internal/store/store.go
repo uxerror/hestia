@@ -195,6 +195,31 @@ CREATE TABLE hosts (
 	link         TEXT NOT NULL DEFAULT 'null'
 );
 `},
+	{7, `
+CREATE TABLE integrations (
+	id         INTEGER PRIMARY KEY,
+	kind       TEXT NOT NULL,
+	name       TEXT NOT NULL,
+	base_url   TEXT NOT NULL,
+	tls_pin    TEXT NOT NULL DEFAULT '',
+	username   TEXT NOT NULL,
+	secret_id  INTEGER NOT NULL REFERENCES secrets(id),
+	version    TEXT NOT NULL DEFAULT '',
+	created_at INTEGER NOT NULL,
+	updated_at INTEGER NOT NULL
+);
+CREATE TABLE dns_names (
+	id             INTEGER PRIMARY KEY,
+	integration_id INTEGER NOT NULL REFERENCES integrations(id) ON DELETE CASCADE,
+	domain         TEXT NOT NULL UNIQUE,
+	answer         TEXT NOT NULL,
+	status         TEXT NOT NULL DEFAULT 'ok',
+	status_detail  TEXT NOT NULL DEFAULT '',
+	verified_at    INTEGER,
+	checked_at     INTEGER,
+	created_at     INTEGER NOT NULL
+);
+`},
 }
 
 // KnownSchema is the newest schema version this binary can work with.

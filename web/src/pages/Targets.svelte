@@ -9,6 +9,7 @@
   import StorageList from '../components/StorageList.svelte';
   import RoleFix from '../components/RoleFix.svelte';
   import UpdateCard from '../components/UpdateCard.svelte';
+  import DnsName from '../components/DnsName.svelte';
   import { Boxes, Server, Trash2, Plus, KeyRound, RefreshCw, List, CloudUpload } from 'lucide-svelte';
 
   const live = createLive();
@@ -95,6 +96,7 @@
   <div class="alert mb-4 text-sm" data-testid="installed-note">Hestia работает на сервере: {place.location?.ip}{place.location?.vmid ? ` (контейнер ${place.location.vmid})` : ''}.</div>
 {/if}
 {#if place?.state === 'installed'}<UpdateCard />{/if}
+<DnsName />
 
 {#if loading}
   <div class="flex justify-center py-12"><span class="loading loading-spinner loading-lg"></span></div>

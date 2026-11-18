@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"io/fs"
 	"net/http"
 	"strings"
@@ -30,8 +29,14 @@ func newMovedHandler(gate *selfinstall.Gate, web fs.FS, version string) http.Han
 				"status": "moved", "version": version, "remote": rem.URL, "instance_id": rem.InstanceID,
 			})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/remote":
+			// url is the address that answers (the DNS name or its fallback).
+			url, ok := selfinstall.ReachableURL(r.Context(), *rem)
+			if !ok {
+				url = rem.URL
+			}
 			writeJSON(w, http.StatusOK, map[string]any{
-				"url": rem.URL, "instance_id": rem.InstanceID, "reachable": checkRemote(r.Context(), *rem),
+				"url": url, "fallback_url": rem.FallbackURL, "configured_url": rem.URL,
+				"instance_id": rem.InstanceID, "reachable": ok,
 			})
 		case strings.HasPrefix(r.URL.Path, "/api/"):
 			writeError(w, http.StatusServiceUnavailable, "Hestia работает на "+rem.URL)
@@ -39,8 +44,4 @@ func newMovedHandler(gate *selfinstall.Gate, web fs.FS, version string) http.Han
 			spa.ServeHTTP(w, r)
 		}
 	})
-}
-
-func checkRemote(ctx context.Context, r selfinstall.Remote) bool {
-	return selfinstall.CheckRemote(ctx, r)
 }

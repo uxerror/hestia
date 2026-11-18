@@ -1,9 +1,11 @@
 <script>
   import { api } from '../lib/api.js';
   import { serviceRows, filterServices, groupByCategory, categoriesOf } from '../lib/services.js';
-  import { Search, ExternalLink } from 'lucide-svelte';
+  import { adguardMark } from '../lib/dnsname.js';
+  import { Search, ExternalLink, Globe } from 'lucide-svelte';
 
   let view = $state(null);
+  let dns = $state(null);
   let error = $state('');
   let query = $state('');
   let category = $state('');
@@ -12,6 +14,7 @@
 
   $effect(() => {
     api.network().then((v) => (view = v)).catch((e) => (error = e.message));
+    api.dns().then((d) => (dns = d)).catch(() => {});
   });
 
   const rows = $derived(serviceRows(view?.hosts));
@@ -54,7 +57,14 @@
           <tr class="bg-base-200"><th colspan="6">{g.label} <span class="opacity-60 font-normal">· {g.rows.length}</span></th></tr>
           {#each g.rows as r (r.key)}
             <tr class:opacity-60={!r.alive} data-testid="service-row">
-              <td class="font-medium">{r.name}</td>
+              <td class="font-medium">
+                {r.name}
+                {#if adguardMark(r, dns)}
+                  {@const m = adguardMark(r, dns)}
+                  <a class="badge badge-sm badge-success gap-1 ml-1" href="#/targets" data-testid="adguard-mark"><Globe size={10} /> {m.text}</a>
+                  {#if m.status && m.status.label !== 'Работает'}<span class="badge badge-sm {m.status.cls}">{m.status.label}</span>{/if}
+                {/if}
+              </td>
               <td>{r.host}{#if r.host !== r.ip} <span class="opacity-60 text-xs">{r.ip}</span>{/if}</td>
               <td class="font-mono">{r.port}</td>
               <td class="text-xs opacity-80">{r.detail}</td>

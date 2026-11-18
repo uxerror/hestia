@@ -1,9 +1,10 @@
 // Fetch wrapper: relative /api/v1 URLs, cookie session, JSON errors {error}.
 export class ApiError extends Error {
-  constructor(status, message) {
+  constructor(status, message, data = null) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.data = data; // the whole JSON body of the error (code, fingerprint, ...)
   }
 }
 
@@ -46,7 +47,7 @@ export async function request(method, path, body, { skip401 = false } = {}) {
     const msg = (data && data.error) || `Ошибка сервера (${res.status})`;
     if (res.status === 401 && !skip401 && unauthorizedHandler) unauthorizedHandler();
     if (isTransferError(res.status, msg) && transferHandler) transferHandler();
-    throw new ApiError(res.status, msg);
+    throw new ApiError(res.status, msg, data);
   }
   return data;
 }
@@ -86,5 +87,13 @@ export const api = {
   startInstall: (probeId) => request('POST', '/selfinstall', { probe_id: probeId }),
   // 401 = unknown/used/expired token, not an expired session.
   handoff: (token) => request('POST', '/auth/handoff', { token }, { skip401: true }),
+  dns: () => request('GET', '/dns'),
+  dnsCheck: () => request('POST', '/dns/check'),
+  probeAdguard: (url) => request('POST', '/dns/adguard/probe', { url }),
+  connectAdguard: (body) => request('POST', '/dns/adguard', body),
+  updateAdguard: (body) => request('PUT', '/dns/adguard', body),
+  disconnectAdguard: () => request('DELETE', '/dns/adguard'),
+  dnsPlan: (action, domain) => request('POST', '/dns/plan', { action, domain }),
+  dnsApply: (planId, hash) => request('POST', '/dns/apply', { plan_id: planId, hash }),
   deleteTarget: (id, revert) => request('DELETE', '/targets/' + encodeURIComponent(id) + '?revert=' + (revert ? 'true' : 'false')),
 };
