@@ -101,6 +101,10 @@ func TestUpdateEndpointsNeedLogin(t *testing.T) {
 }
 
 func TestUpdateStatusWithoutLocation(t *testing.T) {
+	// behave like a build without a release key, whatever release.pub holds
+	saved := update.ReleasePub
+	update.ReleasePub = ""
+	t.Cleanup(func() { update.ReleasePub = saved })
 	e := newUpdEnv(t)
 	login(t, e.env)
 	resp, b := e.do(t, e.client, "GET", "/api/v1/update", "")
