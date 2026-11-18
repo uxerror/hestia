@@ -88,6 +88,8 @@ hosts.csv, proxmox.md): 3 узла, 46 гостей, ключевые серви
 
 ## 1f. AdGuard → `hestia.home`
 
+Подробная спека и решения: 02g-stage-1f-adguard.md (ниже — исходный набросок).
+
 - Отпечаток: HTTP `GET /control/status` (ответ 401/200 с JSON AdGuard), заголовки/страница
   входа AdGuard Home; проверить также DNS на :53 этого хоста.
 - Если найден: предложение «Прописать Hestia в AdGuard как `hestia.home`?» — домен редактируется,
