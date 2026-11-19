@@ -71,6 +71,19 @@ type SSHTargets struct {
 
 // Exec runs script on the target.
 func (t *SSHTargets) Exec(ctx context.Context, refStr, script string, stdin []byte) (sshx.Result, error) {
+	return t.exec(ctx, refStr, script, stdin, false)
+}
+
+// ExecNode runs script as root on the Proxmox node of an "lxc:" reference
+// (not inside the container).
+func (t *SSHTargets) ExecNode(ctx context.Context, refStr, script string) (sshx.Result, error) {
+	if !strings.HasPrefix(refStr, "lxc:") {
+		return sshx.Result{}, errors.New("команды на узле — только для контейнеров Proxmox")
+	}
+	return t.exec(ctx, refStr, script, nil, true)
+}
+
+func (t *SSHTargets) exec(ctx context.Context, refStr, script string, stdin []byte, onNode bool) (sshx.Result, error) {
 	ref, err := ParseRef(refStr)
 	if err != nil {
 		return sshx.Result{}, err
@@ -112,7 +125,9 @@ func (t *SSHTargets) Exec(ctx context.Context, refStr, script string, stdin []by
 		}
 		cfg = sshx.Config{Host: node.IP, Port: tg.Port, User: tg.SSHUser, Signer: t.Identity.Signer,
 			ExpectedFP: node.HostKeyFP, HostKeyAlgorithms: sshx.AlgorithmsForKeyType(node.HostKeyType)}
-		cmd = "pct exec " + strconv.Itoa(ref.VMID) + " -- " + cmd
+		if !onNode {
+			cmd = "pct exec " + strconv.Itoa(ref.VMID) + " -- " + cmd
+		}
 		if tg.SSHUser != "root" {
 			cmd = "sudo -n " + cmd
 		}
@@ -174,7 +189,8 @@ func (m *Manager) Candidates(ctx context.Context) ([]Candidate, error) {
 			if snap != nil {
 				c.OS = snap.os
 			}
-			c.DockerCapable = debianLike(c.OS)
+			// An unknown OS (no inventory yet) is checked by deploy.plan.
+			c.DockerCapable = c.OS == "" || debianLike(c.OS)
 			out = append(out, c)
 		case store.KindProxmox:
 			if snap == nil {

@@ -178,6 +178,9 @@ test('api: plugin calls', async () => {
     'POST /api/v1/plugins/instances/5/plan': () => [200, { plan_id: 'p2', hash: 'h' }],
     'POST /api/v1/plugins/plans/p1/apply': () => [409, { error: 'Состояние изменилось, проверьте план ещё раз' }],
     'GET /api/v1/plugins/targets': () => [200, { targets: [] }],
+    'GET /api/v1/plugins/catalog': () => [200, { plugins: [{ id: 'hestia-hello' }], error: '' }],
+    'POST /api/v1/plugins/catalog/refresh': () => [200, { plugins: [], error: 'подпись каталога неверна: каталог не показывается' }],
+    'POST /api/v1/plugins/packages/catalog': () => [200, { upload_id: 'u2', preview: { id: 'hestia-hello' } }],
   });
   const { api } = await env.import('lib/api.js');
   assert.equal((await api.plugins()).available, true);
@@ -198,8 +201,33 @@ test('api: plugin calls', async () => {
   assert.deepEqual(env.calls.at(-1).body, { action: 'update', config: { port: 81 } });
   await api.planRemoveInstance(5);
   assert.deepEqual(env.calls.at(-1).body, { action: 'remove' });
+  assert.equal((await api.pluginCatalog()).plugins[0].id, 'hestia-hello');
+  assert.match((await api.refreshPluginCatalog()).error, /подпись/);
+  assert.equal((await api.fetchCatalogPackage('hestia-hello')).upload_id, 'u2');
+  assert.deepEqual(env.calls.at(-1).body, { id: 'hestia-hello' });
   await assert.rejects(api.applyPluginPlan('p1', 'h', false), (e) => e.status === 409);
   assert.deepEqual(env.calls.at(-1).body, { hash: 'h', confirm_danger: false });
   assert.deepEqual((await api.pluginTargets()).targets, []);
+  env.dispose();
+});
+
+test('plugins: catalog actions and status line', async () => {
+  const env = setupEnv();
+  const p = await env.import('lib/plugins.js');
+  assert.deepEqual(p.catalogAction({ id: 'a', version: 'v0.2.0', compatible: true, installed: '', update: false }), { kind: 'install', label: 'Установить' });
+  assert.deepEqual(p.catalogAction({ version: 'v0.2.0', compatible: true, installed: 'v0.1.0', update: true }), { kind: 'update', label: 'Обновить до v0.2.0' });
+  assert.deepEqual(p.catalogAction({ version: 'v0.2.0', compatible: true, installed: 'v0.2.0', update: false }), { kind: 'installed', label: 'Установлен v0.2.0' });
+  assert.equal(p.catalogAction({ compatible: false, reason: 'плагину нужна Hestia v9.0.0' }).kind, 'incompatible');
+  assert.equal(p.catalogAction({ compatible: false }).label, 'Нужна более новая Hestia');
+  assert.equal(p.catalogAction(null).kind, 'none');
+
+  const now = Date.parse('2026-11-19T12:00:00Z');
+  assert.deepEqual(p.catalogStatus({ fetched_at: null, error: '' }, now), { text: 'Каталог ещё не загружен', error: '' });
+  assert.equal(p.catalogStatus({ fetched_at: '2026-11-19T11:59:40Z' }, now).text, 'Проверен только что');
+  assert.equal(p.catalogStatus({ fetched_at: '2026-11-19T11:30:00Z' }, now).text, 'Проверен 30 мин назад');
+  assert.equal(p.catalogStatus({ fetched_at: '2026-11-19T07:00:00Z' }, now).text, 'Проверен 5 ч назад');
+  assert.equal(p.catalogStatus({ fetched_at: '2026-11-15T12:00:00Z' }, now).text, 'Проверен 4 дн назад');
+  assert.deepEqual(p.catalogStatus({ fetched_at: '2026-11-19T11:30:00Z', error: 'нет сети' }, now).error, 'нет сети');
+  assert.deepEqual(p.catalogStatus(null), { text: '', error: '' });
   env.dispose();
 });

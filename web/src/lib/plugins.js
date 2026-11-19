@@ -196,3 +196,29 @@ export async function uploadPackage(file, fetchFn = fetch) {
   if (!res.ok) throw new ApiError(res.status, (data && data.error) || `Ошибка сервера (${res.status})`, data);
   return data;
 }
+
+// What a catalog entry offers: install, update, nothing (installed) or why
+// it cannot be installed. item — CatalogItem of GET /plugins/catalog.
+export function catalogAction(item) {
+  if (!item) return { kind: 'none', label: '' };
+  if (!item.compatible) return { kind: 'incompatible', label: item.reason || 'Нужна более новая Hestia' };
+  if (item.update) return { kind: 'update', label: `Обновить до ${item.version}` };
+  if (item.installed) return { kind: 'installed', label: `Установлен ${item.installed}` };
+  return { kind: 'install', label: 'Установить' };
+}
+
+// Header line of the catalog: when it was fetched and the last error.
+export function catalogStatus(view, now = Date.now()) {
+  if (!view) return { text: '', error: '' };
+  const error = view.error || '';
+  if (!view.fetched_at) return { text: 'Каталог ещё не загружен', error };
+  const t = new Date(view.fetched_at);
+  if (Number.isNaN(t.getTime())) return { text: '', error };
+  const mins = Math.max(0, Math.round((now - t.getTime()) / 60000));
+  let ago;
+  if (mins < 1) ago = 'только что';
+  else if (mins < 60) ago = `${mins} мин назад`;
+  else if (mins < 48 * 60) ago = `${Math.round(mins / 60)} ч назад`;
+  else ago = `${Math.round(mins / 1440)} дн назад`;
+  return { text: `Проверен ${ago}`, error };
+}

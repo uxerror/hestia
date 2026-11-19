@@ -77,8 +77,10 @@ func (m *Manager) List(ctx context.Context) (List, error) {
 	if err != nil {
 		return out, err
 	}
+	updates := m.catalogUpdates(ctx, ps)
 	for _, p := range ps {
 		v := m.view(p)
+		v.Update = updates[p.ID]
 		for _, in := range insts {
 			if in.PluginID == p.ID {
 				v.Instances++
@@ -133,6 +135,7 @@ func (m *Manager) Get(ctx context.Context, id string, withUnit bool) (*PluginDet
 		return nil, err
 	}
 	d := &PluginDetail{PluginView: m.view(p), Manifest: json.RawMessage(p.Manifest), Readme: p.Readme}
+	d.Update = m.catalogUpdates(ctx, []store.Plugin{p})[p.ID]
 	d.Instances = len(insts)
 	if withUnit && p.Source != store.PluginSourceDev {
 		st, err := m.UnitState(ctx, id)

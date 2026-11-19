@@ -9,8 +9,6 @@ import (
 	"github.com/uxerror/hestia/internal/store"
 )
 
-const msgCatalogLater = "Каталог плагинов будет в следующем обновлении"
-
 func (s *server) pluginError(w http.ResponseWriter, r *http.Request, err error) {
 	var pe *plugins.Error
 	if errors.As(err, &pe) {
@@ -245,6 +243,33 @@ func (s *server) pluginForgetAuthor(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *server) pluginCatalogLater(w http.ResponseWriter, r *http.Request) {
-	writeError(w, http.StatusNotImplemented, msgCatalogLater)
+func (s *server) pluginCatalog(w http.ResponseWriter, r *http.Request) {
+	v, err := s.Plugins.Catalog(r.Context())
+	if err != nil {
+		s.pluginError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, v)
+}
+
+// pluginCatalogRefresh downloads the catalog now; a download or signature
+// failure is part of the answer (error), not an HTTP error.
+func (s *server) pluginCatalogRefresh(w http.ResponseWriter, r *http.Request) {
+	_ = s.Plugins.RefreshCatalog(r.Context())
+	s.pluginCatalog(w, r)
+}
+
+func (s *server) pluginFromCatalog(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ID string `json:"id"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	res, err := s.Plugins.FetchFromCatalog(r.Context(), req.ID)
+	if err != nil {
+		s.pluginError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
 }

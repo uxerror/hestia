@@ -2,21 +2,24 @@
   "protocol": 1,
   "id": "hestia-hello",
   "name": "Hestia Hello",
-  "version": "v0.1.0",
-  "description": "Демонстрационный плагин: записывает приветствие в файл на выбранном сервере",
+  "version": "v0.2.0",
+  "description": "Демонстрационный сервис whoami в Docker: отвечает приветствием по HTTP",
   "homepage": "https://github.com/uxerror/hestia",
   "author": {"name": "uxerror", "key": "v/i7jzbuZQGgOed7Q04PAQy3kj8U1gODTDdZdx2IXbo="},
-  "min_hestia": "v0.1.0",
-  "permissions": ["targets.read", "targets.exec"],
-  "provides": [{"type": "demo.hello"}],
+  "min_hestia": "v0.2.0",
+  "permissions": ["targets.read", "deploy.docker", "net.outbound"],
+  "provides": [{"type": "http.service"}],
   "requires": [],
   "multi_instance": true,
   "schema": {
     "fields": [
-      {"name": "target", "type": "target", "label": "Где записать", "required": true,
-       "help": "Сервер или контейнер, на котором появится файл /tmp/hestia-hello-<номер экземпляра>"},
+      {"name": "target", "type": "target", "label": "Где запустить", "required": true,
+       "filter": {"docker_capable": true},
+       "help": "Сервер или контейнер Proxmox с Debian/Ubuntu; Docker поставится, если его нет"},
+      {"name": "port", "type": "int", "label": "Порт", "default": 8080, "min": 1, "max": 65535,
+       "help": "Порт на цели, на котором whoami будет отвечать"},
       {"name": "message", "type": "string", "label": "Приветствие", "default": "Привет от Hestia",
-       "max_len": 200, "required": true}
+       "max_len": 200}
     ],
     "presets": [
       {"name": "default", "label": "По умолчанию", "values": {}},

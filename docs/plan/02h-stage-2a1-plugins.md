@@ -491,3 +491,57 @@ GET    /api/v1/plugins/targets              кандидаты для поля `
   `targets.exec`; файл `/tmp/hestia-hello-<id>`.
 - **Состояние «не отвечает»** — `unresponsive` после трёх пропущенных `ping`; задачи плагина
   (`plugin-*`) на один плагин не идут параллельно.
+
+## Отклонения (по факту реализации 2a-1b)
+
+- **Compose — JSON-объект, не YAML.** Без новых зависимостей YAML не разобрать, поэтому `compose` в
+  `deploy.plan/up` — JSON-объект; на цель он пишется как `compose.yaml` (JSON — подмножество YAML,
+  Docker compose его читает). Описано в `docs/plugins/protocol.md`.
+- **Валидация compose строже спеки:** кроме перечисленного запрещены `device_cgroup_rules`, `gpus`,
+  `deploy.resources.reservations.devices`, `security_opt`, `userns_mode`, `uts`, `cgroup_parent`,
+  `cgroup: host`, `volumes_from`, `use_api_socket`, `provider`, `privileged` в `build` и хуках,
+  `network_mode`/`pid`/`ipc` вида `container:…`, сети `host`, тома с `driver_opts`/не `local`,
+  пути вне каталога в `env_file`/`build.context`/`secrets|configs.*.file`, `include` и
+  `extends.file` целиком (файлы внутри проекта Hestia не проверяет), подстановки `$…` в путях/портах/
+  `*_mode`. Compose всегда вызывается с `-p` и `-f compose.yaml` (`.env` не подменит файл).
+- **Порядок шагов `deploy.up`:** features LXC и перезапуск CT идут **до** установки Docker (иначе
+  postinst `docker.io` в CT без nesting падает). Дальше — как в спеке.
+- **features LXC меняются через узел, а не API:** конфиг CT читается API Proxmox (как в спеке), но
+  `keyctl` (и любые features, кроме `nesting`) API разрешает менять только `root@pam`, а у Hestia —
+  токен. Поэтому `pct set <vmid> --features … && pct reboot <vmid>` выполняется по SSH на узле (тот же
+  root/sudo-путь, что у `pct exec`), затем Hestia ждёт, пока CT отвечает (3 мин). Прочие features
+  (`fuse`, `mount` …) сохраняются.
+- **Подтверждение danger для `deploy.up`:** задача применения помнит, что в плане было `danger`-действие
+  и пользователь поставил галку; без этого `deploy.up` отказывает до любых изменений.
+- **Пакеты Docker:** Debian — `docker.io docker-compose`, Ubuntu — `docker.io docker-compose-v2`
+  (в Ubuntu `docker-compose` — v1). Если после установки `docker compose` v2 нет (Debian 12: пакет
+  `docker-compose` — v1), шаг падает с подсказкой поставить Docker по инструкции docker.com.
+- **Файлы проекта:** Hestia ведёт список своих файлов (`.hestia-files`); лишние из прошлой версии
+  удаляются, подкаталоги (данные контейнеров) не трогаются. Откат — из `.hestia-prev` (копия только
+  файлов из списка). Владелец файлов — root (команды идут от root), отдельного `chown` нет.
+- **`deploy.up`/`deploy.down` сами создают шаги задачи** (плагин не должен оборачивать их в
+  `job.step`) и принимают `job_id` только задачи применения этого же экземпляра.
+- **`docker_capable` у SSH-цели без данных инвентаря** — `true` (ОС проверит `deploy.plan`); известная
+  не-Debian/Ubuntu ОС — `false`, как раньше.
+- **`target.list`** во время плана/применения `update` возвращает и новую цель (как `granted()`),
+  иначе плагин не узнаёт её адрес.
+- **Каталог:** URL-база — та же, что у проверки обновлений (`update.GitHub`, API релизов: release по
+  тегу `plugins-catalog`); в `serve` добавлен флаг `--github-api` (для тестов и smoke), он же
+  подменяет базу проверки обновлений. Релиз `plugins-catalog` создаётся как pre-release с
+  `--latest=false`, чтобы `releases/latest` (проверка обновлений Hestia) его не видел. Подпись
+  `index.json.sig` — base64 ed25519 всего `index.json` (как `SHA256SUMS.sig`). В БД хранится только
+  проверенный `index.json`; сетевая ошибка оставляет прежний каталог с предупреждением, неверная
+  подпись его стирает. Проверка раз в сутки — своя (первая через минуту после старта), включается
+  только в `serve` (`CatalogChecks`), не в тестах. Пакет из каталога должен быть подписан
+  официальным ключом и совпадать с записью по `id`/`version`; `GET /plugins` и `GET /plugins/{id}`
+  показывают обновление только официальных плагинов и только совместимых по `min_hestia`.
+- **`hestia-release catalog-add`** пишет подпись в `<index>.sig`, требует, чтобы пакет был подписан тем
+  же ключом и назывался как в релизе, и отказывает при понижении версии. Флаги `--repo` и
+  `--url-base` задают ссылку на пакет. `plugin-pack` получил `--version` (сверка с манифестом —
+  её использует `make plugin`).
+- **hestia-hello v0.2.0:** compose-проект `whoami` (`/opt/hestia/<экземпляр>-whoami`), сервис
+  `traefik/whoami:v1.10` с `restart: unless-stopped`; при смене цели — `deploy.down` на старой.
+  Если у цели нет известного адреса (LXC без IP в инвентаре), проверка по HTTP пропускается с
+  предупреждением в плане, статус — `unknown`.
+- **UI:** страницы «Плагины» и плагина грузятся динамическим `import()` (основной бандл < 500 КБ).
+  Установка/обновление из каталога — тот же диалог, что для файла/ссылки, без шага выбора источника.

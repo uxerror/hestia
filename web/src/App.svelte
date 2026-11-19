@@ -15,8 +15,6 @@
   import Install from './pages/Install.svelte';
   import Moved from './pages/Moved.svelte';
   import UpdateOffer from './pages/UpdateOffer.svelte';
-  import Plugins from './pages/Plugins.svelte';
-  import PluginPage from './pages/PluginPage.svelte';
   import { updateInfo, loadUpdateInfo } from './lib/updateinfo.svelte.js';
   import { badgeText } from './lib/update.js';
   import { Flame, LogOut, User, Puzzle } from 'lucide-svelte';
@@ -107,8 +105,10 @@
       {:else if route.name === 'targets'}<Targets />
       {:else if route.name === 'map'}<NetMap />
       {:else if route.name === 'services'}<Services />
-      {:else if route.name === 'plugins'}<Plugins />
-      {:else if route.name === 'plugin'}{#key route.id}<PluginPage id={route.id} />{/key}
+      {:else if route.name === 'plugins'}
+        {#await import('./pages/Plugins.svelte')}<div class="flex justify-center py-12"><span class="loading loading-spinner loading-lg"></span></div>{:then m}<m.default />{/await}
+      {:else if route.name === 'plugin'}
+        {#await import('./pages/PluginPage.svelte')}<div class="flex justify-center py-12"><span class="loading loading-spinner loading-lg"></span></div>{:then m}{#key route.id}<m.default id={route.id} />{/key}{/await}
       {:else if route.name === 'install'}<Install />
       {:else if route.name === 'update-offer'}{#key route.hash}<UpdateOffer hash={route.hash} />{/key}
       {:else if route.name === 'guests'}{#key route.id}<Guests id={route.id} node={route.node} />{/key}

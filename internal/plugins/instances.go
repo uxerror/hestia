@@ -64,6 +64,9 @@ type applyJob struct {
 	instanceID int64
 	grants     []store.PluginGrant
 	run        *jobs.Run
+	// confirmed: the plan had a "danger" action and the user confirmed it
+	// (deploy.up may then change container features).
+	confirmed bool
 
 	mu    sync.Mutex
 	masks []string
@@ -508,7 +511,8 @@ func (m *Manager) Apply(ctx context.Context, planID string, req ApplyRequest) (s
 	}
 	// The plan is used now: it no longer extends grants, the job does.
 	delete(m.plans, planID)
-	a := &applyJob{pluginID: st.pluginID, instanceID: st.instanceID, grants: st.grants}
+	a := &applyJob{pluginID: st.pluginID, instanceID: st.instanceID, grants: st.grants,
+		confirmed: st.view().Danger && req.ConfirmDanger}
 	m.mu.Unlock()
 
 	verb := map[string]string{sdk.ActionCreate: "создание", sdk.ActionUpdate: "изменение", sdk.ActionRemove: "удаление"}[st.action]

@@ -38,6 +38,10 @@ const (
 	MethodTargetPut    = "target.put_file"
 	MethodInventoryGet = "inventory.get"
 	MethodLog          = "log"
+	MethodDeployPlan   = "deploy.plan"
+	MethodDeployUp     = "deploy.up"
+	MethodDeployDown   = "deploy.down"
+	MethodDeployStatus = "deploy.status"
 )
 
 // Permissions (closed list of protocol v1).
@@ -271,6 +275,120 @@ type JobLog struct {
 type LogLine struct {
 	Level string `json:"level"`
 	Line  string `json:"line"`
+}
+
+// ---- deploy (Docker compose on a granted target, needs deploy.docker) ----
+
+// DeployFile is a file of a compose project, written next to compose.yaml
+// (name without "/", at most 1 MB, mode 0640, owner root).
+type DeployFile struct {
+	Name string `json:"name"`
+	Data []byte `json:"data_b64"`
+}
+
+// DeployRequest is the parameter of deploy.plan and deploy.up. Compose is
+// the compose file as a JSON object (Docker compose reads JSON as YAML);
+// JobID is required for deploy.up (the apply job the steps go to).
+type DeployRequest struct {
+	JobID    string          `json:"job_id,omitempty"`
+	Instance int64           `json:"instance"`
+	Target   string          `json:"target"`
+	Project  string          `json:"project"`
+	Compose  json.RawMessage `json:"compose"`
+	Files    []DeployFile    `json:"files,omitempty"`
+}
+
+// DeployDownRequest stops and removes a project (Volumes: its named volumes
+// too).
+type DeployDownRequest struct {
+	JobID    string `json:"job_id"`
+	Instance int64  `json:"instance"`
+	Target   string `json:"target"`
+	Project  string `json:"project"`
+	Volumes  bool   `json:"volumes"`
+}
+
+// DeployStatusRequest asks about a project.
+type DeployStatusRequest struct {
+	Instance int64  `json:"instance"`
+	Target   string `json:"target"`
+	Project  string `json:"project"`
+}
+
+// File actions of a deploy plan.
+const (
+	FileCreate    = "create"
+	FileUpdate    = "update"
+	FileUnchanged = "unchanged"
+	FileRemove    = "remove"
+)
+
+// DeployFileChange is one file of a deploy plan.
+type DeployFileChange struct {
+	Name    string `json:"name"`
+	Action  string `json:"action"`
+	Size    int64  `json:"size"`
+	OldSize int64  `json:"old_size"`
+}
+
+// DeployPlan is the answer of deploy.plan: what deploy.up would do. Put
+// Actions and Warnings into the instance plan as they are (an action with
+// risk "danger" makes the user confirm it).
+type DeployPlan struct {
+	// Project is the compose project name, Dir its directory on the target.
+	Project string `json:"project"`
+	Dir     string `json:"dir"`
+	// Exists: the project directory is there; Changed: some file differs.
+	Exists  bool `json:"exists"`
+	Changed bool `json:"changed"`
+	// InstallDocker / EnableFeatures: deploy.up will install Docker or
+	// switch on nesting/keyctl of the container (and restart it).
+	InstallDocker  bool               `json:"install_docker"`
+	EnableFeatures bool               `json:"enable_features"`
+	Files          []DeployFileChange `json:"files"`
+	Actions        []Action           `json:"actions"`
+	Warnings       []string           `json:"warnings"`
+}
+
+// DeployPort is a published port of a container.
+type DeployPort struct {
+	URL           string `json:"url"`
+	TargetPort    int    `json:"target_port"`
+	PublishedPort int    `json:"published_port"`
+	Protocol      string `json:"protocol"`
+}
+
+// DeployContainer is a line of `docker compose ps`.
+type DeployContainer struct {
+	Name     string       `json:"name"`
+	Service  string       `json:"service"`
+	State    string       `json:"state"`
+	Status   string       `json:"status"`
+	Health   string       `json:"health"`
+	ExitCode int          `json:"exit_code"`
+	Ports    []DeployPort `json:"ports"`
+}
+
+// DeployStatus is the answer of deploy.status and deploy.up.
+type DeployStatus struct {
+	Project    string            `json:"project"`
+	Docker     bool              `json:"docker"`
+	Exists     bool              `json:"exists"`
+	Containers []DeployContainer `json:"containers"`
+}
+
+// Running reports whether every container of the project runs (and there
+// is at least one).
+func (s DeployStatus) Running() bool {
+	if len(s.Containers) == 0 {
+		return false
+	}
+	for _, c := range s.Containers {
+		if c.State != "running" {
+			return false
+		}
+	}
+	return true
 }
 
 // ---- manifest ----

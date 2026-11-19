@@ -124,9 +124,9 @@ func New(cfg Config) http.Handler {
 
 	if cfg.Plugins != nil {
 		mux.HandleFunc("GET /api/v1/plugins", s.requireAuth(s.pluginsList))
-		mux.HandleFunc("GET /api/v1/plugins/catalog", s.requireAuth(s.pluginCatalogLater))
-		mux.HandleFunc("POST /api/v1/plugins/catalog/refresh", s.requireAuth(s.pluginCatalogLater))
-		mux.HandleFunc("POST /api/v1/plugins/packages/catalog", s.requireAuth(s.pluginCatalogLater))
+		mux.HandleFunc("GET /api/v1/plugins/catalog", s.requireAuth(s.pluginCatalog))
+		mux.HandleFunc("POST /api/v1/plugins/catalog/refresh", s.requireAuth(s.pluginCatalogRefresh))
+		mux.HandleFunc("POST /api/v1/plugins/packages/catalog", s.requireAuth(s.pluginFromCatalog))
 		mux.HandleFunc("POST /api/v1/plugins/packages", s.requireAuth(s.pluginUpload))
 		mux.HandleFunc("POST /api/v1/plugins/packages/fetch", s.requireAuth(s.pluginFetch))
 		mux.HandleFunc("POST /api/v1/plugins/install", s.requireAuth(s.pluginInstall))

@@ -215,8 +215,8 @@ func TestTargetPermissions(t *testing.T) {
 	if err != nil || string(out) != "[]" {
 		t.Fatalf("%s %v", out, err)
 	}
-	// deploy.* is the next batch.
-	if _, err := p.call("deploy.plan", struct{}{}); !rpc.IsCode(err, rpc.CodeMethodNotFound) {
+	// deploy.* needs deploy.docker (see deploy_test.go for every branch).
+	if _, err := p.call(sdk.MethodDeployPlan, sdk.DeployRequest{Instance: mine, Target: "ssh:1", Project: "web"}); !rpc.IsCode(err, rpc.CodePermission) {
 		t.Fatal(err)
 	}
 }

@@ -107,7 +107,7 @@ func (a *app) close() {
 }
 
 // newApp builds the handler used by both serve and desktop.
-func newApp(ctx context.Context, dataDir, mode, pluginDev string) (*app, error) {
+func newApp(ctx context.Context, dataDir, mode, pluginDev, githubAPI string) (*app, error) {
 	// A moved controller never touches its (archived) database.
 	rem, err := selfinstall.ReadRemote(dataDir)
 	if err != nil {
@@ -175,12 +175,13 @@ func newApp(ctx context.Context, dataDir, mode, pluginDev string) (*app, error) 
 		},
 	}).Init()
 	dns.Start(invCtx)
-	up := (&update.Service{Store: st, Runner: runner, DataDir: dataDir, Version: version, Self: si}).Init()
+	up := (&update.Service{Store: st, Runner: runner, DataDir: dataDir, Version: version, Self: si,
+		GitHub: &update.GitHub{BaseURL: githubAPI}}).Init()
 	up.CleanTemp()
 	up.StartChecks(invCtx)
 	pm := (&plugins.Manager{
 		Store: st, Secrets: sec, Runner: runner, Identity: id, Version: version, DataDir: dataDir, Mode: mode,
-		Inventory: inv, Netscan: nm,
+		Inventory: inv, Netscan: nm, GitHub: &update.GitHub{BaseURL: githubAPI}, CatalogChecks: true,
 		Location: func(ctx context.Context) (*selfinstall.Location, error) {
 			state, err := si.State(ctx)
 			return state.Location, err
@@ -213,13 +214,14 @@ func cmdServe(args []string) int {
 	listen := fs.String("listen", ":8080", "адрес для прослушивания")
 	data := fs.String("data", "./data", "каталог данных")
 	pluginDev := fs.String("plugin-dev", "", "запустить плагин дочерним процессом без песочницы (разработка)")
+	githubAPI := fs.String("github-api", update.DefaultAPI, "адрес API GitHub для обновлений и каталога плагинов (для тестов)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	a, err := newApp(ctx, *data, "serve", *pluginDev)
+	a, err := newApp(ctx, *data, "serve", *pluginDev, *githubAPI)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "ошибка:", err)
 		return 1
@@ -261,7 +263,7 @@ func cmdDesktop(args []string) int {
 	if !desktop.Available {
 		return desktop.Run(nil, "", "") // prints the stub message, exit code 2
 	}
-	a, err := newApp(context.Background(), *data, "desktop", "")
+	a, err := newApp(context.Background(), *data, "desktop", "", update.DefaultAPI)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "ошибка:", err)
 		return 1

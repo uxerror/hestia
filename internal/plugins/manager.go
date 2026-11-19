@@ -21,10 +21,12 @@ import (
 	"github.com/uxerror/hestia/internal/inventory"
 	"github.com/uxerror/hestia/internal/jobs"
 	"github.com/uxerror/hestia/internal/netscan"
+	"github.com/uxerror/hestia/internal/proxmox"
 	"github.com/uxerror/hestia/internal/secrets"
 	"github.com/uxerror/hestia/internal/selfinstall"
 	"github.com/uxerror/hestia/internal/sshx"
 	"github.com/uxerror/hestia/internal/store"
+	"github.com/uxerror/hestia/internal/update"
 	"github.com/uxerror/hestia/sdk"
 	"github.com/uxerror/hestia/sdk/rpc"
 )
@@ -101,13 +103,30 @@ type Manager struct {
 	Open     func(ctx context.Context, loc selfinstall.Location) (Shell, error)
 	// Targets runs commands on targets granted to instances.
 	Targets TargetExec
-	// HTTP downloads packages by URL.
+	// PVE reads container configs through the Proxmox API (default: a
+	// client built from the stored target, on PVEPort).
+	PVE     func(ctx context.Context, t store.Target) (LXCConfigAPI, error)
+	PVEPort int
+	// HTTP downloads packages by URL and from the catalog.
 	HTTP *http.Client
-	Now  func() time.Time
+	// GitHub serves the official catalog (release "plugins-catalog");
+	// CatalogChecks refreshes it a minute after Start and then daily.
+	GitHub        *update.GitHub
+	CatalogChecks bool
+	Now           func() time.Time
 
 	HelloTimeout      time.Duration
 	HeartbeatInterval time.Duration
 	StatusInterval    time.Duration
+
+	// Timeouts of deploy.* (defaults in deploy.go).
+	DeployPoll           time.Duration
+	DeployWaitRunning    time.Duration
+	DeployProbeTimeout   time.Duration
+	DeployInstallTimeout time.Duration
+	DeployUpTimeout      time.Duration
+	DeployDownTimeout    time.Duration
+	DeployCTTimeout      time.Duration
 
 	mu       sync.Mutex
 	conns    map[string]*session // plugin id → authenticated connection
@@ -156,6 +175,27 @@ func (m *Manager) Init() *Manager {
 	if m.Targets == nil {
 		m.Targets = &SSHTargets{Store: m.Store, Identity: m.Identity}
 	}
+	if m.GitHub == nil {
+		m.GitHub = &update.GitHub{HTTP: m.HTTP}
+	}
+	if m.PVE == nil {
+		m.PVE = m.defaultPVE
+	}
+	if m.PVEPort == 0 {
+		m.PVEPort = proxmox.APIPort
+	}
+	for _, d := range []struct {
+		p *time.Duration
+		v time.Duration
+	}{
+		{&m.DeployPoll, 2 * time.Second}, {&m.DeployWaitRunning, DeployWaitRunning}, {&m.DeployProbeTimeout, deployProbeT},
+		{&m.DeployInstallTimeout, deployInstallT}, {&m.DeployUpTimeout, deployUpT}, {&m.DeployDownTimeout, deployDownT},
+		{&m.DeployCTTimeout, deployCTT},
+	} {
+		if *d.p <= 0 {
+			*d.p = d.v
+		}
+	}
 	m.conns = map[string]*session{}
 	m.waiters = map[string][]chan struct{}{}
 	m.pending = map[string]*pendingInstall{}
@@ -175,6 +215,9 @@ func (m *Manager) Init() *Manager {
 // periodic status checks until Close.
 func (m *Manager) Start() {
 	m.ensureListener()
+	if m.CatalogChecks && m.Mode != "desktop" {
+		m.startCatalogChecks()
+	}
 	m.bg.Add(1)
 	go func() {
 		defer m.bg.Done()

@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"path"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -114,9 +115,8 @@ func (m *Manager) hostCall(ctx context.Context, s *session, method string, param
 			return nil, denied(sdk.PermInventoryRead, map[string]any{"permission": sdk.PermInventoryRead})
 		}
 		return m.inventoryView(ctx)
-	}
-	if strings.HasPrefix(method, "deploy.") {
-		return nil, rpc.Errorf(rpc.CodeMethodNotFound, "%s будет в следующем обновлении Hestia", method)
+	case sdk.MethodDeployPlan, sdk.MethodDeployUp, sdk.MethodDeployDown, sdk.MethodDeployStatus:
+		return m.deployCall(ctx, s, method, params)
 	}
 	return nil, rpc.Errorf(rpc.CodeMethodNotFound, "метод %s не поддерживается", method)
 }
@@ -139,8 +139,14 @@ func (m *Manager) ownInstance(ctx context.Context, pid string, iid int64) error 
 // checkTarget enforces targets.exec, ownership of the instance and the grant
 // of the target to the instance.
 func (m *Manager) checkTarget(ctx context.Context, s *session, iid int64, ref string) error {
-	if !s.can(sdk.PermTargetsExec) {
-		return denied(sdk.PermTargetsExec, map[string]any{"permission": sdk.PermTargetsExec})
+	return m.checkGrant(ctx, s, sdk.PermTargetsExec, iid, ref)
+}
+
+// checkGrant enforces a permission, ownership of the instance and the grant
+// of the target to the instance.
+func (m *Manager) checkGrant(ctx context.Context, s *session, perm string, iid int64, ref string) error {
+	if !s.can(perm) {
+		return denied(perm, map[string]any{"permission": perm})
 	}
 	if err := m.ownInstance(ctx, s.id(), iid); err != nil {
 		return err
@@ -217,19 +223,48 @@ func hasRef(gs []store.PluginGrant, ref string) bool {
 	return false
 }
 
+// grantedTargets lists the targets of an instance: its grants plus the
+// targets of a plan or apply in progress (as granted() allows them).
 func (m *Manager) grantedTargets(ctx context.Context, iid int64) ([]sdk.TargetInfo, error) {
 	gs, err := m.Store.Grants(ctx, iid)
 	if err != nil {
 		return nil, err
 	}
+	refs := []string{}
+	add := func(list []store.PluginGrant) {
+		for _, g := range list {
+			if !slices.Contains(refs, g.Ref) {
+				refs = append(refs, g.Ref)
+			}
+		}
+	}
+	add(gs)
+	m.mu.Lock()
+	now := m.Now()
+	for _, p := range m.plans {
+		if p.instanceID == iid && now.Before(p.expires) {
+			add(p.grants)
+		}
+	}
+	for _, a := range m.applying {
+		if a.instanceID == iid {
+			add(a.grants)
+		}
+	}
+	for _, g := range m.planning {
+		if g.instanceID == iid {
+			add(g.grants)
+		}
+	}
+	m.mu.Unlock()
 	cands, err := m.Candidates(ctx)
 	if err != nil {
 		return nil, err
 	}
 	out := []sdk.TargetInfo{}
-	for _, g := range gs {
+	for _, ref := range refs {
 		for _, c := range cands {
-			if c.ID == g.Ref {
+			if c.ID == ref {
 				out = append(out, c.TargetInfo)
 			}
 		}

@@ -314,6 +314,37 @@ func (h *Host) Inventory(ctx context.Context) (json.RawMessage, error) {
 	return out, err
 }
 
+// DeployPlan asks what deploying a compose project on a granted target
+// would do (needs deploy.docker). It changes nothing.
+func (h *Host) DeployPlan(ctx context.Context, req DeployRequest) (DeployPlan, error) {
+	var out DeployPlan
+	err := h.conn.Call(ctx, MethodDeployPlan, req, &out)
+	return out, err
+}
+
+// DeployUp deploys the project within the apply job req.JobID: Docker,
+// container features, files, `docker compose up`, wait until running; on a
+// failure Hestia rolls the project back. Hestia adds its own job steps, so
+// do not wrap the call in Job.Step/Run. It has no overall timeout.
+func (h *Host) DeployUp(ctx context.Context, req DeployRequest) (DeployStatus, error) {
+	var out DeployStatus
+	err := h.conn.CallNoTimeout(ctx, MethodDeployUp, req, &out)
+	return out, err
+}
+
+// DeployDown stops and removes the project and its directory (steps go to
+// the job, like DeployUp).
+func (h *Host) DeployDown(ctx context.Context, req DeployDownRequest) error {
+	return h.conn.CallNoTimeout(ctx, MethodDeployDown, req, nil)
+}
+
+// DeployStatus returns the containers of the project.
+func (h *Host) DeployStatus(ctx context.Context, req DeployStatusRequest) (DeployStatus, error) {
+	var out DeployStatus
+	err := h.conn.Call(ctx, MethodDeployStatus, req, &out)
+	return out, err
+}
+
 // Log writes a line to the plugin's system log in Hestia (level: info,
 // warn, error). Errors are ignored.
 func (h *Host) Log(ctx context.Context, level, line string) {

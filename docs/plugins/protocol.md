@@ -109,10 +109,14 @@ Hestia сверяет токен (хранит только его sha256, ср�
 | `target.put_file` | `targets.exec` | `{instance, target, path, data_b64, mode: "0644"}` |
 | `inventory.get` | `inventory.read` | `{}` → `{targets: [...], network: {...}}` (как `GET /api/v1/inventory` и `/network`) |
 | `log` | — | `{level, line}` — системный журнал Hestia с префиксом id плагина |
-| `deploy.*` | `deploy.docker` | следующий этап (сейчас — ошибка `-32601`) |
+| `deploy.plan` | `deploy.docker` | `{instance, target, project, compose, files?}` → план развёртывания (ничего не меняет) |
+| `deploy.up` | `deploy.docker` | `{job_id, instance, target, project, compose, files?}` → `{project, docker, exists, containers}` |
+| `deploy.down` | `deploy.docker` | `{job_id, instance, target, project, volumes}` |
+| `deploy.status` | `deploy.docker` | `{instance, target, project}` → `{project, docker, exists, containers}` |
 
 - `job.*` принимаются только для задачи `instance.apply`, которую Hestia сейчас выполняет у этого
-  плагина.
+  плагина. `deploy.up`/`deploy.down` — тоже: `job_id` должен быть задачей применения **этого
+  экземпляра**, иначе `-32001`. Подробно — раздел «Развёртывание Docker compose».
 - Имя секрета — `[A-Za-z0-9_.-]{1,64}`; секреты лежат в пространстве `plugin:<id>:<экземпляр>:<имя>` и
   удаляются вместе с экземпляром и плагином.
 - `target.exec`: команда выполняется `sh -c` от root на цели (SSH под root или `sudo -n`, контейнер —
@@ -142,11 +146,99 @@ Hestia сверяет токен (хранит только его sha256, ср�
 |---|---|---|
 | `targets.read` | `target.list` | «Видеть выбранные серверы (имя, адрес, ОС)» |
 | `targets.exec` | `target.exec`, `target.put_file` | «Выполнять команды от root на выбранных серверах» |
-| `deploy.docker` | `deploy.*` (следующий этап) | «Разворачивать Docker-контейнеры» |
+| `deploy.docker` | `deploy.*` | «Разворачивать Docker-контейнеры» |
 | `inventory.read` | `inventory.get` | «Читать карту сети» |
 | `net.outbound` | сетевые сокеты в песочнице | «Сетевые подключения напрямую» |
 
 Без `net.outbound` песочница разрешает только unix-сокеты: всё общение с целями — через Hestia.
+
+## Развёртывание Docker compose (`deploy.*`)
+
+Hestia разворачивает compose-проект плагина на выданной цели: SSH-сервер с root/sudo или
+существующий контейнер LXC на подключённом Proxmox (команды — через `pct exec` с узла). Плагину не
+нужно право `targets.exec`: всё, что делается на цели, делает и проверяет Hestia.
+
+**Проект.** `project` — `^[a-z0-9][a-z0-9_-]{0,39}$`. На цели это каталог
+`/opt/hestia/<экземпляр>-<project>/` (0750, файлы 0640, владелец root) и compose-проект
+`hestia-<экземпляр>-<project>`. В каталоге: `compose.yaml` (то, что прислал плагин, после проверки и с
+метками), файлы из `files` и служебные `.hestia-files` (список файлов Hestia) и `.hestia-prev`
+(резервная копия на время `up`). Подкаталоги (данные контейнеров, например `./data`) Hestia не
+трогает, кроме `deploy.down`, который удаляет каталог целиком.
+
+**`compose` — JSON-объект**, а не текст YAML: Docker compose читает JSON как YAML, а Hestia проверяет
+структуру без парсера YAML. Пример:
+
+```json
+{"services": {"whoami": {"image": "traefik/whoami:v1.10", "command": ["--name", "Привет"],
+  "ports": ["8080:80"], "restart": "unless-stopped", "volumes": ["./data:/data"]}}}
+```
+
+**`files`** — `[{name, data_b64}]`, до 32 файлов, каждый ≤ 1 МБ, всё вместе ≤ 4 МБ. Имя —
+`[A-Za-z0-9._-]{1,100}` без `/`; `compose.yaml` и имена на `.hestia` заняты. `.env` разрешён (compose
+подставит переменные), но Hestia всегда вызывает compose с `-p` и `-f compose.yaml`, так что
+`COMPOSE_FILE` и `COMPOSE_PROJECT_NAME` из `.env` ни на что не влияют.
+
+**Что Hestia запрещает в compose** (ошибка `-32602` с путём к полю, например
+`compose: services.app.privileged: привилегированный режим запрещён`):
+
+- `privileged: true` (и в `build`, `post_start`/`pre_stop`), `cap_add`, `devices`,
+  `device_cgroup_rules`, `gpus`, `deploy.resources.reservations.devices`, `security_opt`,
+  `userns_mode`, `uts`, `cgroup_parent`, `cgroup` кроме `private`, `volumes_from`,
+  `use_api_socket`, `provider`;
+- `network_mode` кроме `bridge`/`none`/`service:<имя>`; `pid` кроме `service:<имя>`; `ipc` кроме
+  `private`/`shareable`/`none`/`service:<имя>`; сети с именем или драйвером `host`;
+- bind-маунты вне каталога проекта — в коротком (`/etc:/x`, `../x:/x`, `~/x:/x`) и длинном
+  (`{type: bind, source: …}`) синтаксисе; тома с `driver_opts` или драйвером не `local`; типы томов
+  кроме `bind`/`volume`/`tmpfs`;
+- пути вне каталога проекта в `env_file`, `build.context`, `secrets.*.file`, `configs.*.file`;
+  `build.additional_contexts`, `build.entitlements`, `build.network: host`;
+- `include` и `extends.file` (внешние файлы Hestia не проверяет; `extends: {service: …}` можно);
+- подстановки `$…` в томах, путях, портах и `*_mode` (иначе путь подменяется переменной).
+
+Метки `hestia.plugin=<id>` и `hestia.instance=<экземпляр>` Hestia ставит каждому сервису сама
+(ваши метки `hestia.*` заменяются), поле `name` верхнего уровня убирается.
+
+**`deploy.plan`** проверяет цель и отвечает:
+
+```json
+{"project": "hestia-5-whoami", "dir": "/opt/hestia/5-whoami", "exists": false, "changed": true,
+ "install_docker": false, "enable_features": false,
+ "files": [{"name": "compose.yaml", "action": "create", "size": 362, "old_size": 0}],
+ "actions": [{"title": "Создать проект hestia-5-whoami в /opt/hestia/5-whoami", "detail": "compose.yaml: новый, 362 Б", "risk": "change"},
+             {"title": "Запустить: docker compose -p hestia-5-whoami up -d --remove-orphans", "detail": "сервисы: whoami", "risk": "change"}],
+ "warnings": []}
+```
+
+Положите `actions` и `warnings` в свой план как есть — так пользователь увидит, что сделает Hestia.
+Возможные действия:
+
+- **Docker не установлен** (или нет `docker compose` v2) на Debian/Ubuntu — «Установить Docker:
+  `apt-get install -y docker.io docker-compose`» (на Ubuntu пакет compose — `docker-compose-v2`).
+  На другой ОС `deploy.plan` — ошибка с командой `curl -fsSL https://get.docker.com | sh` (поставить
+  вручную и составить план заново).
+- **Контейнер LXC без `nesting=1`** (и без `keyctl=1`, если он непривилегированный) — действие
+  `risk: danger` «Включить nesting и keyctl для CT <vmid> (Proxmox, нужен перезапуск контейнера)».
+  Конфигурацию CT Hestia читает через API Proxmox. Пользователь подтверждает такое действие отдельной
+  галкой; без неё `deploy.up` откажет, не меняя ничего.
+- **Файлы**: создать / изменить (размеры «было → стало») / без изменений / удалить лишние.
+- **Порты**: если опубликованный порт на цели уже слушает не этот проект (`ss -ltnH`) — предупреждение.
+
+План детерминирован (сортировка файлов и портов), поэтому хеш плана экземпляра не «плавает».
+
+**`deploy.up`** выполняется внутри `instance.apply` и сам добавляет шаги в задачу (не оборачивайте
+вызов в `job.step` — Hestia закроет ваш шаг): проверка цели → включение features LXC и перезапуск CT
+(если нужно и подтверждено) → установка Docker (если нужно) → запись файлов → `docker compose -p …
+-f compose.yaml up -d --remove-orphans` → ожидание, пока все сервисы в состоянии `running` (60 с).
+При ошибке после записи файлов — откат: у существующего проекта возвращаются прежние файлы и
+выполняется `up -d`, новый проект — `down -v` и удаление каталога. Docker и features LXC обратно не
+снимаются (в журнале задачи — что осталось). Ответ — как у `deploy.status`. В SDK вызов без общего
+таймаута (`Host.DeployUp`).
+
+**`deploy.down`** — `docker compose down --remove-orphans` (с `volumes: true` — ещё и `-v`, именованные
+тома проекта удаляются) и удаление каталога проекта; тоже шаги задачи.
+
+**`deploy.status`** — `{project, docker, exists, containers: [{name, service, state, status, health,
+exit_code, ports: [{url, target_port, published_port, protocol}]}]}` (по `docker compose ps -a`).
 
 ## Манифест и пакет
 
@@ -177,6 +269,33 @@ go run ./cmd/hestia-release plugin-verify dist/plugins/my-plugin-v0.1.0-linux-am
 Первая установка стороннего плагина показывает отпечаток ключа (SHA-256) и закрепляет ключ;
 обновления принимаются только с тем же ключом и только с большей версией.
 
+`plugin-pack --version vX.Y.Z` дополнительно сверяет версию в `manifest.json` (так делает
+`make plugin`). Ключ — только у вас: не кладите его в репозиторий; потеряли ключ — пользователям
+придётся удалить плагин и поставить заново с новым ключом.
+
+## Каталог и подпись
+
+- **Официальный каталог** — релиз GitHub с постоянным тегом `plugins-catalog` в `uxerror/hestia`
+  (pre-release, чтобы не мешать проверке обновлений Hestia): `index.json`, `index.json.sig` и пакеты
+  `.hpkg` (старые версии остаются). Hestia проверяет его раз в сутки и по кнопке «Проверить сейчас».
+- `index.json`:
+  `{"generated": "<RFC3339>", "plugins": [{"id", "name", "version", "description", "min_hestia",
+  "url", "sha256", "size", "permissions", "provides", "requires"}]}`; одна запись на `id`.
+- `index.json.sig` — base64 подписи ed25519 **всего файла** `index.json` официальным ключом плагинов
+  (`internal/plugins/official.pub`). Неверная подпись — каталог не показывается совсем, в интерфейсе
+  ошибка. Сетевая ошибка — остаётся последний проверенный каталог и предупреждение.
+- Установка из каталога: Hestia скачивает `url`, сверяет `size` и `sha256` с каталогом, затем
+  проверяет пакет как любой другой (подпись `SHA256SUMS` ключом автора) и требует, чтобы он был
+  подписан официальным ключом и совпадал по `id` и `version` с записью. Обновления официальных
+  плагинов видны в списке плагинов («Обновить до vX»); понизить версию нельзя.
+- `hestia-release catalog-add --index dist/plugins/index.json --key <ключ> <пакет.hpkg>...`
+  добавляет или заменяет записи (понижение версии — ошибка), сортирует по `id` и пишет рядом
+  `index.json.sig`. `make plugin-publish ID=<id> VERSION=<v>` делает это для официальных плагинов.
+- **Сторонние авторы** в официальный каталог не попадают: распространяйте `.hpkg` ссылкой
+  (`https://`, ≤ 64 МБ, редиректы GitHub разрешены) или файлом. Удобно — релизом GitHub своего
+  репозитория. Доверие — по закреплённому ключу автора (см. выше); автопроверки обновлений для
+  сторонних плагинов пока нет — пользователь ставит новую версию той же кнопкой.
+
 ## Песочница
 
 Юнит `hestia-plugin@<id>.service`: `DynamicUser=yes`, `ProtectSystem=strict`, `ProtectHome=yes`,
@@ -187,7 +306,9 @@ go run ./cmd/hestia-release plugin-verify dist/plugins/my-plugin-v0.1.0-linux-am
 
 ## Пример сессии
 
-`→` — от плагина к Hestia, `←` — от Hestia к плагину (каждая строка — отдельное сообщение).
+`→` — от плагина к Hestia, `←` — от Hestia к плагину (каждая строка — отдельное сообщение). Пример —
+плагин, работающий через `target.exec`/`target.put_file` (так был устроен `hestia-hello` v0.1.0;
+v0.2.0 делает то же через `deploy.plan`/`deploy.up`, см. `plugins/hestia-hello`).
 
 ```
 → {"jsonrpc":"2.0","id":1,"method":"hello","params":{"protocol":1,"id":"hestia-hello","version":"v0.1.0","token":"6f1c…"}}

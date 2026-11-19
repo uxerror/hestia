@@ -2,7 +2,8 @@
   import { api } from '../lib/api.js';
   import { stateInfo, authorBadge, fingerprintDisplay, shortFingerprint, capabilityText, sourceLabel, unitInfo, jobIdOf, removeBlocked } from '../lib/plugins.js';
   import JobProgress from './JobProgress.svelte';
-  import { Puzzle, Power, PowerOff, Trash2, TriangleAlert } from 'lucide-svelte';
+  import PluginInstall from './PluginInstall.svelte';
+  import { Puzzle, Power, PowerOff, Trash2, TriangleAlert, ArrowUpCircle } from 'lucide-svelte';
 
   // Card of an installed plugin with «Отключить/Включить» and «Удалить».
   //  plugin — PluginView (with `unit` on the plugin page);
@@ -16,6 +17,7 @@
   let confirmRemove = $state(false);
   let blocked = $state(null); // {message, instances} of a 409
   let job = $state(null); // {id, kind}
+  let updating = $state(false); // the update dialog (from the catalog)
 
   const st = $derived(stateInfo(plugin.state));
   const author = $derived(authorBadge(plugin.author));
@@ -92,6 +94,9 @@
       </div>
       {#if !plugin.dev && !job}
         <div class="flex flex-wrap gap-2 justify-end">
+          {#if plugin.update}
+            <button class="btn btn-sm btn-info" onclick={() => (updating = true)} disabled={busy} title={plugin.update.new_permissions?.length ? 'Новые права: ' + plugin.update.new_permissions.join(', ') : ''} data-testid="plugin-update"><ArrowUpCircle size={14} /> Обновить до {plugin.update.to}</button>
+          {/if}
           {#if plugin.enabled}
             <button class="btn btn-sm" onclick={() => run('disable')} disabled={busy} data-testid="plugin-disable"><PowerOff size={14} /> Отключить</button>
           {:else}
@@ -123,3 +128,7 @@
     {/if}
   </div>
 </div>
+
+{#if updating}
+  <PluginInstall catalogId={plugin.id} onchanged={() => onchanged?.('update')} onclose={(changed) => ((updating = false), changed && onchanged?.('update'))} />
+{/if}

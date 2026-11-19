@@ -6,28 +6,26 @@ import (
 	"encoding/json"
 	"fmt"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
-	"sync"
 	"testing"
 	"testing/fstest"
 	"time"
-
-	"golang.org/x/crypto/ssh"
 
 	"github.com/uxerror/hestia/internal/api"
 	"github.com/uxerror/hestia/internal/auth"
 	"github.com/uxerror/hestia/internal/jobs"
 	"github.com/uxerror/hestia/internal/plugins"
+	"github.com/uxerror/hestia/internal/plugins/deploytest"
 	"github.com/uxerror/hestia/internal/secrets"
-	"github.com/uxerror/hestia/internal/sshx/sshxtest"
 	"github.com/uxerror/hestia/internal/store"
+	"github.com/uxerror/hestia/internal/update"
 )
 
 // buildHello compiles the demo plugin (the build cache makes repeats cheap).
@@ -42,57 +40,10 @@ func buildHello(t *testing.T) string {
 	return bin
 }
 
-// fakeFS is the filesystem of the fake SSH target (only what hello uses).
-type fakeFS struct {
-	mu    sync.Mutex
-	files map[string]string
-	cmds  []string
-}
-
-var (
-	reHelloCat = regexp.MustCompile(`^cat (/tmp/hestia-hello-\d+) 2>/dev/null \|\| exit 3$`)
-	reHelloPut = regexp.MustCompile(`^umask 077 && cat > '(/tmp/hestia-hello-\d+)' && chmod 0644 '/tmp/hestia-hello-\d+'$`)
-	reHelloRm  = regexp.MustCompile(`^rm -f (/tmp/hestia-hello-\d+)$`)
-)
-
-// unquote reverses `sh -c '<script>'` as built by target.Quote.
-func unquote(cmd string) (string, bool) {
-	if !strings.HasPrefix(cmd, "sh -c '") || !strings.HasSuffix(cmd, "'") {
-		return "", false
-	}
-	return strings.ReplaceAll(cmd[len("sh -c '"):len(cmd)-1], `'\''`, `'`), true
-}
-
-func (f *fakeFS) handle(user, cmd string, stdin []byte) (string, string, int) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	script, ok := unquote(cmd)
-	if !ok || user != "root" {
-		return "", "unexpected: " + cmd, 127
-	}
-	f.cmds = append(f.cmds, script)
-	if m := reHelloCat.FindStringSubmatch(script); m != nil {
-		v, ok := f.files[m[1]]
-		if !ok {
-			return "", "", 3
-		}
-		return v, "", 0
-	}
-	if m := reHelloPut.FindStringSubmatch(script); m != nil {
-		f.files[m[1]] = string(stdin)
-		return "", "", 0
-	}
-	if m := reHelloRm.FindStringSubmatch(script); m != nil {
-		delete(f.files, m[1])
-		return "", "", 0
-	}
-	return "", "unexpected: " + script, 127
-}
-
 type pluginEnv struct {
 	*env
 	pm  *plugins.Manager
-	fs  *fakeFS
+	tg  *deploytest.Target
 	ref string
 }
 
@@ -116,18 +67,16 @@ func newPluginEnv(t *testing.T) *pluginEnv {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The target: an in-process SSH server that accepts Hestia's key.
-	fs := &fakeFS{files: map[string]string{}}
-	srv := sshxtest.New(t)
-	want := string(id.Signer.PublicKey().Marshal())
-	srv.KeyAuth = func(u string, k ssh.PublicKey) bool { return u == "root" && string(k.Marshal()) == want }
-	srv.Handler = fs.handle
+	// The target: an in-process SSH server that accepts Hestia's key, with
+	// fake docker/apt-get/ss (nothing real is run).
+	ft := deploytest.New(t, id.Signer.PublicKey())
+	srv := ft.Srv
 	tg := &store.Target{Kind: store.KindSSH, Name: "web", Host: srv.Host, Port: srv.Port, SSHUser: "root", HostKeyFP: srv.HostKeyFP()}
 	if err := st.CreateTarget(context.Background(), tg); err != nil {
 		t.Fatal(err)
 	}
 	pm := (&plugins.Manager{Store: st, Secrets: sec, Runner: runner, Identity: id, Version: "test", DataDir: dir,
-		Mode: "serve", SocketPath: "-"}).Init()
+		Mode: "serve", SocketPath: "-", GitHub: &update.GitHub{BaseURL: "http://127.0.0.1:1"}, DeployPoll: 20 * time.Millisecond}).Init()
 	pm.Start()
 	if err := pm.StartDev(bin); err != nil {
 		t.Fatal(err)
@@ -140,7 +89,7 @@ func newPluginEnv(t *testing.T) *pluginEnv {
 	jar, _ := cookiejar.New(nil)
 	t.Cleanup(func() { hs.Close(); pm.Close(); runner.Shutdown(); _ = st.Close() })
 	e := &env{srv: hs, client: &http.Client{Jar: jar}, runner: runner, store: st}
-	return &pluginEnv{env: e, pm: pm, fs: fs, ref: fmt.Sprintf("ssh:%d", tg.ID)}
+	return &pluginEnv{env: e, pm: pm, tg: ft, ref: fmt.Sprintf("ssh:%d", tg.ID)}
 }
 
 func decode(t *testing.T, b []byte, v any) {
@@ -174,8 +123,9 @@ func (e *pluginEnv) apply(t *testing.T, p planResp) {
 	waitJobDone(t, e.env, r.Job.ID)
 }
 
-// E2E of the framework in dev mode: the real hestia-hello binary, a fake
-// SSH target, plan → apply → status → remove over the HTTP API.
+// E2E in dev mode: the real hestia-hello binary, a fake SSH target with fake
+// docker, plan → apply (deploy.up + HTTP check) → status → remove over the
+// HTTP API. The "container" is a local HTTP server on the configured port.
 func TestPluginDevEndToEnd(t *testing.T) {
 	e := newPluginEnv(t)
 	login(t, e.env)
@@ -185,16 +135,16 @@ func TestPluginDevEndToEnd(t *testing.T) {
 		Available bool
 		Reason    string
 		Plugins   []struct {
-			ID, State, Source string
-			Dev               bool
-			Permissions       []string
+			ID, State, Source, Version string
+			Dev                        bool
+			Permissions                []string
 		}
 	}
 	deadline := time.Now().Add(15 * time.Second)
 	for {
 		_, b := e.do(t, e.client, "GET", "/api/v1/plugins", "")
 		decode(t, b, &list)
-		if len(list.Plugins) == 1 && list.Plugins[0].State == "connected" && len(list.Plugins[0].Permissions) == 2 {
+		if len(list.Plugins) == 1 && list.Plugins[0].State == "connected" && len(list.Plugins[0].Permissions) == 3 {
 			break
 		}
 		if time.Now().After(deadline) {
@@ -203,7 +153,8 @@ func TestPluginDevEndToEnd(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 	}
 	p := list.Plugins[0]
-	if p.ID != "hestia-hello" || !p.Dev || p.Source != "dev" || list.Available {
+	if p.ID != "hestia-hello" || p.Version != "v0.2.0" || !p.Dev || p.Source != "dev" || list.Available ||
+		strings.Join(p.Permissions, ",") != "targets.read,deploy.docker,net.outbound" {
 		t.Fatalf("%+v %+v", p, list)
 	}
 
@@ -219,25 +170,43 @@ func TestPluginDevEndToEnd(t *testing.T) {
 		t.Fatalf("%d %s", resp.StatusCode, b)
 	}
 
+	// whoami: a local HTTP server stands for the container.
+	who := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "Name: Привет, сеть\nHostname: test\n")
+	}))
+	defer who.Close()
+	_, portStr, _ := net.SplitHostPort(who.Listener.Addr().String())
+	e.tg.Set("port", portStr)
+	e.tg.Set("service", "whoami")
+
 	// Create.
 	resp, b = e.do(t, e.client, "POST", "/api/v1/plugins/hestia-hello/instances/plan",
-		`{"name":"","config":{"target":"`+e.ref+`","message":"Привет, сеть"}}`)
+		`{"name":"","config":{"target":"`+e.ref+`","port":`+portStr+`,"message":"Привет, сеть"}}`)
 	if resp.StatusCode != 200 {
 		t.Fatalf("plan %d %s", resp.StatusCode, b)
 	}
 	var pl planResp
 	decode(t, b, &pl)
-	path := fmt.Sprintf("/tmp/hestia-hello-%d", pl.Instance.ID)
-	if pl.Action != "create" || pl.Instance.Name != "Hestia Hello 1" || len(pl.Plan.Actions) != 1 ||
-		!strings.Contains(pl.Plan.Actions[0].Title, path) {
+	url := "http://127.0.0.1:" + portStr + "/"
+	proj := fmt.Sprintf("hestia-%d-whoami", pl.Instance.ID)
+	var titles []string
+	for _, a := range pl.Plan.Actions {
+		titles = append(titles, a.Title)
+	}
+	all := strings.Join(titles, "\n")
+	if pl.Action != "create" || pl.Instance.Name != "Hestia Hello 1" || !strings.Contains(all, "Создать проект "+proj) ||
+		!strings.Contains(all, "Проверить "+url) || strings.Contains(all, "Установить Docker") {
 		t.Fatalf("%+v", pl)
 	}
 	e.apply(t, pl)
-	e.fs.mu.Lock()
-	got := e.fs.files[path]
-	e.fs.mu.Unlock()
-	if got != "Привет, сеть\n" {
-		t.Fatalf("file on the target: %q", got)
+	dir := fmt.Sprintf("/opt/hestia/%d-whoami", pl.Instance.ID)
+	compose, ok := e.tg.File(dir + "/compose.yaml")
+	if !ok || !strings.Contains(compose, "Привет, сеть") || !strings.Contains(compose, `"hestia.plugin": "hestia-hello"`) ||
+		!strings.Contains(compose, portStr+":80") {
+		t.Fatalf("compose.yaml: %q", compose)
+	}
+	if !strings.Contains(e.tg.Log("docker.log"), "compose -p "+proj+" -f compose.yaml up -d --remove-orphans") {
+		t.Fatal(e.tg.Log("docker.log"))
 	}
 
 	// Status.
@@ -246,9 +215,10 @@ func TestPluginDevEndToEnd(t *testing.T) {
 	var inst struct {
 		Status, Detail string
 		Targets        []string
+		Endpoints      []struct{ Name, URL string }
 	}
 	decode(t, b, &inst)
-	if inst.Status != "ok" || inst.Detail != "Привет, сеть" || len(inst.Targets) != 1 {
+	if inst.Status != "ok" || inst.Detail != "Name: Привет, сеть" || len(inst.Targets) != 1 || len(inst.Endpoints) != 1 || inst.Endpoints[0].URL != url {
 		t.Fatalf("%s", b)
 	}
 	_, b = e.do(t, e.client, "GET", "/api/v1/plugins/hestia-hello/instances", "")
@@ -256,28 +226,26 @@ func TestPluginDevEndToEnd(t *testing.T) {
 		t.Fatal(string(b))
 	}
 
-	// Somebody edits the file: degraded.
-	e.fs.mu.Lock()
-	e.fs.files[path] = "другое\n"
-	e.fs.mu.Unlock()
+	// The service stops answering: down.
+	who.Close()
 	_, b = e.do(t, e.client, "GET", "/api/v1/plugins/instances/"+iid+"?status=refresh", "")
 	decode(t, b, &inst)
-	if inst.Status != "degraded" {
+	if inst.Status != "down" {
 		t.Fatalf("%s", b)
 	}
 
-	// Remove.
+	// Remove: docker compose down -v and the directory goes.
 	resp, b = e.do(t, e.client, "POST", "/api/v1/plugins/instances/"+iid+"/plan", `{"action":"remove"}`)
 	if resp.StatusCode != 200 {
 		t.Fatalf("%d %s", resp.StatusCode, b)
 	}
 	decode(t, b, &pl)
 	e.apply(t, pl)
-	e.fs.mu.Lock()
-	_, exists := e.fs.files[path]
-	e.fs.mu.Unlock()
-	if exists {
-		t.Fatal("file not removed")
+	if !strings.Contains(e.tg.Log("docker.log"), "down -v --remove-orphans") {
+		t.Fatal(e.tg.Log("docker.log"))
+	}
+	if _, ok := e.tg.File(dir + "/compose.yaml"); ok {
+		t.Fatal("project directory kept")
 	}
 	if resp, _ := e.do(t, e.client, "GET", "/api/v1/plugins/instances/"+iid, ""); resp.StatusCode != 404 {
 		t.Fatalf("instance still there: %d", resp.StatusCode)
@@ -295,13 +263,23 @@ func TestPluginAPIMisc(t *testing.T) {
 		t.Fatal("plugins without login")
 	}
 	login(t, e.env)
-	for _, c := range []struct{ method, path string }{
-		{"GET", "/api/v1/plugins/catalog"}, {"POST", "/api/v1/plugins/catalog/refresh"}, {"POST", "/api/v1/plugins/packages/catalog"},
-	} {
-		resp, b := e.do(t, e.client, c.method, c.path, "{}")
-		if resp.StatusCode != 501 || !strings.Contains(string(b), "следующем обновлении") {
-			t.Fatalf("%s %s: %d %s", c.method, c.path, resp.StatusCode, b)
-		}
+	// The catalog: empty until fetched; GitHub unreachable → an error in
+	// the answer, not an HTTP error.
+	resp, b := e.do(t, e.client, "GET", "/api/v1/plugins/catalog", "")
+	if resp.StatusCode != 200 || !strings.Contains(string(b), `"plugins":[]`) || !strings.Contains(string(b), `"error":""`) {
+		t.Fatalf("catalog %d %s", resp.StatusCode, b)
+	}
+	resp, b = e.do(t, e.client, "POST", "/api/v1/plugins/catalog/refresh", "")
+	var cv struct {
+		Error   string
+		Plugins []any
+	}
+	decode(t, b, &cv)
+	if resp.StatusCode != 200 || cv.Error == "" || len(cv.Plugins) != 0 {
+		t.Fatalf("refresh %d %s", resp.StatusCode, b)
+	}
+	if resp, _ := e.do(t, e.client, "POST", "/api/v1/plugins/packages/catalog", `{"id":"hestia-hello"}`); resp.StatusCode != 409 {
+		t.Fatalf("catalog install without location: %d", resp.StatusCode)
 	}
 	// Uploads need a controller installed through Hestia.
 	var buf bytes.Buffer
@@ -334,7 +312,7 @@ func TestPluginAPIMisc(t *testing.T) {
 	if resp, _ := e.do(t, e.client, "POST", "/api/v1/plugins/plans/nope/apply", `{"hash":"x"}`); resp.StatusCode != 410 {
 		t.Fatal("unknown plan")
 	}
-	_, b := e.do(t, e.client, "GET", "/api/v1/plugins/authors", "")
+	_, b = e.do(t, e.client, "GET", "/api/v1/plugins/authors", "")
 	if string(b) != "{\"authors\":[]}\n" {
 		t.Fatalf("authors %s", b)
 	}

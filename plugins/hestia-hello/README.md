@@ -1,19 +1,31 @@
 # Hestia Hello
 
-Демонстрационный плагин Hestia и образец для авторов плагинов. В этой версии он проверяет каркас
-плагинов: записывает приветствие в файл `/tmp/hestia-hello-<номер экземпляра>` на выбранном сервере
-(через `target.put_file`), читает его обратно (`target.exec cat`) для плана и статуса и удаляет при
-удалении экземпляра. Версия с контейнером whoami в Docker — следующий этап.
+Демонстрационный плагин Hestia и образец для авторов плагинов. Ставит веб-сервис
+[whoami](https://github.com/traefik/whoami) (`traefik/whoami:v1.10`) в Docker на выбранном сервере
+или контейнере Proxmox и проверяет, что он отвечает по HTTP. Приветствие из формы whoami
+показывает в ответе (`Name: …`).
 
-Права: `targets.read` (имя выбранного сервера в плане), `targets.exec` (запись и чтение файла).
+- Поля формы: `target` — где запустить (Debian/Ubuntu; Docker Hestia поставит сама, если его нет),
+  `port` — порт на цели (8080), `message` — приветствие.
+- Права: `targets.read` (адрес цели для проверки), `deploy.docker` (развёртывание через Hestia),
+  `net.outbound` (сам плагин делает GET к whoami).
+- Предоставляет `http.service`.
 
 ## Как устроен
 
 - `manifest.json` — манифест; вшит в бинарник (`//go:embed`) и кладётся в пакет.
 - `main.go` — `sdk.Serve(manifest, &hello{})`.
-- `hello.go` — `Validate`, `Plan` (что сделает: записать / перезаписать / без изменений / удалить),
-  `Apply` (шаги задачи через `job.Run`), `Status` (`ok` / `degraded` / `down`).
-- `hello_test.go` — юнит-тесты на `sdk/sdktest` (фейковая Hestia).
+- `hello.go`:
+  - `Plan` — `deploy.plan` с compose-файлом из одного сервиса (JSON-объект: Hestia принимает
+    compose в JSON) плюс действие «Проверить http://<адрес>:<порт>/»; действия Hestia (установить
+    Docker, включить nesting/keyctl в LXC, создать/изменить проект) попадают в план как есть;
+  - `Apply` — `deploy.up` (Hestia сама пишет шаги задачи и откатывает проект при ошибке), затем
+    GET до ответа 200 за 20 с; при смене цели — сначала `deploy.down` на старой;
+  - `Status` — GET: `ok` / `degraded` (не 200) / `down` (нет ответа), ссылка на сервис;
+  - удаление экземпляра — `deploy.down` с `volumes: true`.
+- `hello_test.go` — юнит-тесты на `sdk/sdktest` (фейковая Hestia: `OnDeployPlan`, `OnDeployUp`, …).
+
+Протокол и правила для compose-файла — `docs/plugins/protocol.md`.
 
 ## Запуск в режиме разработки
 
@@ -23,15 +35,41 @@ go run ./cmd/hestia serve --listen 127.0.0.1:8080 --data /tmp/hestia-dev --plugi
 ```
 
 Плагин запускается дочерним процессом без песочницы и подписи (в интерфейсе — плашка «dev»).
+Цель для экземпляра — сервер, подключённый к Hestia (SSH с root/sudo) или контейнер Proxmox.
 
-## Пакет
+## Свой плагин на основе этого
+
+1. Скопируйте `plugins/hestia-hello` в свой репозиторий, поменяйте `id` (префикс `hestia-` —
+   только для официальных плагинов), `name`, `version`, `author.name`.
+2. Создайте свой ключ подписи (один раз; храните только у себя):
+
+   ```sh
+   go run github.com/uxerror/hestia/cmd/hestia-release@latest plugin-keygen \
+     --out ~/.config/my-plugins.key --pub my-plugins.pub
+   ```
+
+   Впишите содержимое `my-plugins.pub` в `author.key` манифеста (манифест вшит в бинарник, поэтому
+   ключ — до сборки).
+3. Соберите статический бинарник и пакет:
+
+   ```sh
+   CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags '-s -w' -o build/plugins/my-plugin/plugin .
+   hestia-release plugin-pack --key ~/.config/my-plugins.key --dir build/plugins/my-plugin \
+     --src . --out dist --version v0.1.0
+   hestia-release plugin-verify dist/my-plugin-v0.1.0-linux-amd64.hpkg
+   ```
+
+4. Поставьте: «Плагины → Установить из файла/ссылки» (файл `.hpkg` или ссылка `https://…`, например на
+   релиз GitHub). При первой установке Hestia покажет отпечаток вашего ключа и права плагина;
+   обновления принимаются только с тем же ключом и с большей версией.
+
+## Официальная сборка (для сопровождающего)
 
 ```sh
-go run ./cmd/hestia-release plugin-keygen --out ~/.config/hestia/plugins.key   # один раз; ключ — только у вас
-# впишите публичный ключ (internal/plugins/official.pub) в author.key манифеста и пересоберите
-CGO_ENABLED=0 go build -o build/plugins/hestia-hello/plugin ./plugins/hestia-hello
-go run ./cmd/hestia-release plugin-pack --dir build/plugins/hestia-hello --out dist/plugins
-go run ./cmd/hestia-release plugin-verify dist/plugins/hestia-hello-v0.1.0-linux-amd64.hpkg
+make plugin ID=hestia-hello VERSION=v0.2.0          # build/plugins/hestia-hello/plugin + dist/plugins/*.hpkg
+make plugin-publish ID=hestia-hello VERSION=v0.2.0  # тег plugin/hestia-hello/v0.2.0, каталог plugins-catalog
 ```
 
-Готовый `.hpkg` ставится в «Плагины → Установить из файла/ссылки». Протокол — `docs/plugins/protocol.md`.
+`make plugin` подписывает ключом `~/.config/hestia/plugins.key` (`PLUGIN_KEY=…` — другой) и сверяет
+`VERSION` с манифестом. `make plugin-publish` требует чистое дерево и `gh auth login`; публикуется
+только по решению сопровождающего.

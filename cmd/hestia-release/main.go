@@ -4,6 +4,7 @@ package main
 
 import (
 	"crypto/ed25519"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/uxerror/hestia/internal/plugins"
 	"github.com/uxerror/hestia/internal/update"
@@ -37,6 +39,12 @@ func usage() {
          manifest.json, icon.svg, README.md из --dir или --src
   plugin-verify [--pub internal/plugins/official.pub] <file.hpkg>
          проверить пакет тем же кодом, что и контроллер
+  catalog-add --index dist/plugins/index.json [--key ~/.config/hestia/plugins.key]
+              [--repo uxerror/hestia] [--url-base <адрес>] <file.hpkg>...
+         добавить пакеты в каталог (запись с тем же id заменяется, понижение
+         версии запрещено), отсортировать и переподписать: рядом с index.json
+         пишется <index>.sig; ссылка на пакет — --url-base/<имя пакета>
+         (по умолчанию релиз plugins-catalog репозитория --repo)
 `)
 }
 
@@ -59,6 +67,8 @@ func run(args []string) int {
 		err = pluginPack(args[1:])
 	case "plugin-verify":
 		err = pluginVerify(args[1:])
+	case "catalog-add":
+		err = catalogAdd(args[1:])
 	case "help", "--help", "-h":
 		usage()
 		return 0
@@ -192,6 +202,7 @@ func pluginPack(args []string) error {
 	dir := fs_.String("dir", "", "каталог со сборкой плагина (файл plugin)")
 	src := fs_.String("src", "", "каталог с manifest.json, icon.svg, README.md (по умолчанию plugins/<имя --dir>)")
 	out := fs_.String("out", "dist/plugins", "куда положить пакет")
+	ver := fs_.String("version", "", "ожидаемая версия из manifest.json (vX.Y.Z), необязательно")
 	if err := fs_.Parse(args); err != nil {
 		return err
 	}
@@ -211,6 +222,9 @@ func pluginPack(args []string) error {
 	data, m, err := plugins.PackDir(priv, *dir, *src)
 	if err != nil {
 		return err
+	}
+	if *ver != "" && m.Version != *ver {
+		return fmt.Errorf("в manifest.json версия %s, а ожидается %s — поправьте манифест", m.Version, *ver)
 	}
 	// The package must pass the controller's own checks.
 	if _, err := plugins.ReadPackage(data, ""); err != nil {
@@ -254,5 +268,75 @@ func pluginVerify(args []string) error {
 	fmt.Printf("пакет в порядке: %s %s, автор %s (%s)\nотпечаток ключа: %s\nправа: %s\nsha256: %s\n",
 		p.Manifest.ID, p.Manifest.Version, p.Manifest.Author.Name, kind, plugins.Fingerprint(p.Manifest.Author.Key),
 		strings.Join(p.Manifest.Permissions, ", "), p.SHA256)
+	return nil
+}
+
+func catalogAdd(args []string) error {
+	fs_ := flag.NewFlagSet("catalog-add", flag.ContinueOnError)
+	index := fs_.String("index", "", "файл index.json (создаётся, если его нет)")
+	key := fs_.String("key", defaultPluginKey(), "закрытый ключ официальных плагинов")
+	repo := fs_.String("repo", "uxerror/hestia", "репозиторий GitHub с релизом plugins-catalog")
+	urlBase := fs_.String("url-base", "", "адрес, где лежат пакеты (по умолчанию https://github.com/<repo>/releases/download/plugins-catalog)")
+	if err := fs_.Parse(args); err != nil {
+		return err
+	}
+	if *index == "" || fs_.NArg() == 0 {
+		return errors.New("укажите --index и хотя бы один пакет .hpkg")
+	}
+	base := strings.TrimRight(*urlBase, "/")
+	if base == "" {
+		base = "https://github.com/" + *repo + "/releases/download/" + plugins.CatalogTag
+	}
+	priv, err := loadKey(*key)
+	if err != nil {
+		return err
+	}
+	pub := update.EncodePublicKey(priv.Public().(ed25519.PublicKey))
+	idx := &plugins.CatalogIndexFile{Plugins: []plugins.CatalogEntry{}}
+	if b, err := os.ReadFile(*index); err == nil {
+		if idx, err = plugins.ParseIndex(b); err != nil {
+			return err
+		}
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	for _, path := range fs_.Args() {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		p, err := plugins.ReadPackage(data, "")
+		if err != nil {
+			return fmt.Errorf("%s: %w", path, err)
+		}
+		if p.Manifest.Author.Key != pub {
+			return fmt.Errorf("%s подписан другим ключом (%s): в официальный каталог — только пакеты, подписанные его ключом",
+				path, plugins.Fingerprint(p.Manifest.Author.Key))
+		}
+		name := plugins.PackName(p.Manifest)
+		if filepath.Base(path) != name {
+			return fmt.Errorf("%s: имя файла должно быть %s (так он называется в релизе)", path, name)
+		}
+		if err := plugins.AddToIndex(idx, plugins.EntryFromPackage(p, base+"/"+name), time.Now()); err != nil {
+			return err
+		}
+		fmt.Printf("каталог: %s %s\n", p.Manifest.ID, p.Manifest.Version)
+	}
+	b, err := json.MarshalIndent(idx, "", "  ")
+	if err != nil {
+		return err
+	}
+	b = append(b, '\n')
+	if err := os.MkdirAll(filepath.Dir(*index), 0o755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(*index, b, 0o644); err != nil {
+		return err
+	}
+	sigPath := *index + ".sig"
+	if err := os.WriteFile(sigPath, plugins.SignIndex(priv, b), 0o644); err != nil {
+		return err
+	}
+	fmt.Println("подписано:", *index, "→", sigPath)
 	return nil
 }

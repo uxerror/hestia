@@ -163,9 +163,11 @@ func TestPlanValidation(t *testing.T) {
 	wantFields(t, err, "target", "message", "bogus")
 	_, err = h.m.CreatePlan(ctx, "demo", "x", map[string]any{"target": "ssh:999"})
 	wantFields(t, err, "target")
-	// docker_capable: the SSH target has no known OS.
-	_, err = h.m.CreatePlan(ctx, "demo", "x", map[string]any{"target": web})
-	wantFields(t, err, "target")
+	// docker_capable: the SSH target has no known OS yet — deploy.plan
+	// checks it, the form accepts it.
+	if _, err = h.m.CreatePlan(ctx, "demo", "x", map[string]any{"target": web}); err != nil {
+		t.Fatal(err)
+	}
 	_, err = h.m.CreatePlan(ctx, "demo", "a\nb", map[string]any{})
 	wantFields(t, err, "name")
 

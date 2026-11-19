@@ -104,6 +104,53 @@ func (h *Host) Handle(method string, fn HandlerFunc) {
 	h.mu.Unlock()
 }
 
+// OnDeployPlan answers deploy.plan.
+func (h *Host) OnDeployPlan(fn func(sdk.DeployRequest) (sdk.DeployPlan, error)) {
+	h.Handle(sdk.MethodDeployPlan, func(p json.RawMessage) (any, error) {
+		var req sdk.DeployRequest
+		if err := json.Unmarshal(p, &req); err != nil {
+			return nil, rpc.Errorf(rpc.CodeInvalidParams, "sdktest: %v", err)
+		}
+		return fn(req)
+	})
+}
+
+// OnDeployUp answers deploy.up.
+func (h *Host) OnDeployUp(fn func(sdk.DeployRequest) (sdk.DeployStatus, error)) {
+	h.Handle(sdk.MethodDeployUp, func(p json.RawMessage) (any, error) {
+		var req sdk.DeployRequest
+		if err := json.Unmarshal(p, &req); err != nil {
+			return nil, rpc.Errorf(rpc.CodeInvalidParams, "sdktest: %v", err)
+		}
+		return fn(req)
+	})
+}
+
+// OnDeployDown answers deploy.down.
+func (h *Host) OnDeployDown(fn func(sdk.DeployDownRequest) error) {
+	h.Handle(sdk.MethodDeployDown, func(p json.RawMessage) (any, error) {
+		var req sdk.DeployDownRequest
+		if err := json.Unmarshal(p, &req); err != nil {
+			return nil, rpc.Errorf(rpc.CodeInvalidParams, "sdktest: %v", err)
+		}
+		if err := fn(req); err != nil {
+			return nil, err
+		}
+		return struct{}{}, nil
+	})
+}
+
+// OnDeployStatus answers deploy.status.
+func (h *Host) OnDeployStatus(fn func(sdk.DeployStatusRequest) (sdk.DeployStatus, error)) {
+	h.Handle(sdk.MethodDeployStatus, func(p json.RawMessage) (any, error) {
+		var req sdk.DeployStatusRequest
+		if err := json.Unmarshal(p, &req); err != nil {
+			return nil, rpc.Errorf(rpc.CodeInvalidParams, "sdktest: %v", err)
+		}
+		return fn(req)
+	})
+}
+
 // Calls returns the recorded calls of a method ("" for all).
 func (h *Host) Calls(method string) []Call {
 	h.mu.Lock()

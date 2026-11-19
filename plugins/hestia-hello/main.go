@@ -1,7 +1,6 @@
 // Command hestia-hello is the demo plugin of Hestia and a template for
-// plugin authors. In this version it only exercises the plugin framework:
-// plan and apply write a greeting into /tmp/hestia-hello-<instance> on the
-// chosen target through target.exec/target.put_file, status reads it back.
+// plugin authors: it runs the whoami web service (traefik/whoami) in Docker
+// on the chosen target through deploy.* and checks it over HTTP.
 package main
 
 import (

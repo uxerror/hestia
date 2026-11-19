@@ -109,5 +109,8 @@ export const api = {
   planRemoveInstance: (iid) => request('POST', '/plugins/instances/' + encodeURIComponent(iid) + '/plan', { action: 'remove' }),
   applyPluginPlan: (planId, hash, confirmDanger) => request('POST', '/plugins/plans/' + encodeURIComponent(planId) + '/apply', { hash, confirm_danger: !!confirmDanger }),
   pluginTargets: () => request('GET', '/plugins/targets'),
+  pluginCatalog: () => request('GET', '/plugins/catalog'),
+  refreshPluginCatalog: () => request('POST', '/plugins/catalog/refresh'),
+  fetchCatalogPackage: (id) => request('POST', '/plugins/packages/catalog', { id }),
   deleteTarget: (id, revert) => request('DELETE', '/targets/' + encodeURIComponent(id) + '?revert=' + (revert ? 'true' : 'false')),
 };

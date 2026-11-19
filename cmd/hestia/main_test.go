@@ -20,7 +20,7 @@ func TestMovedModeDoesNotOpenDatabase(t *testing.T) {
 		Location: selfinstall.Location{Kind: "lxc", IP: "198.51.100.7"}}); err != nil {
 		t.Fatal(err)
 	}
-	a, err := newApp(context.Background(), dir, "serve", "")
+	a, err := newApp(context.Background(), dir, "serve", "", "http://127.0.0.1:1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +53,7 @@ func TestMovedModeDoesNotOpenDatabase(t *testing.T) {
 
 func TestNormalStartCreatesInstanceID(t *testing.T) {
 	dir := t.TempDir()
-	a, err := newApp(context.Background(), dir, "serve", "")
+	a, err := newApp(context.Background(), dir, "serve", "", "http://127.0.0.1:1")
 	if err != nil {
 		t.Fatal(err)
 	}

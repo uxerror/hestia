@@ -6,9 +6,11 @@
   import JobProgress from './JobProgress.svelte';
   import { TriangleAlert, ShieldCheck, Upload, Link, ExternalLink } from 'lucide-svelte';
 
-  // Install a plugin from a file or a link: source → preview (permissions,
-  // author, trust) → install job. onchanged() after the job; onclose(changed).
-  let { onchanged, onclose } = $props();
+  // Install a plugin from a file, a link or the catalog: source → preview
+  // (permissions, author, trust) → install job. catalogId skips the source
+  // step (install or update from the official catalog). onchanged() after the
+  // job; onclose(changed).
+  let { onchanged, onclose, catalogId = '' } = $props();
 
   let dlg = $state();
   let step = $state('source'); // source | preview | job
@@ -22,7 +24,27 @@
   let trusted = $state(false);
   let jobId = $state('');
 
-  onMount(() => dlg?.showModal());
+  onMount(() => {
+    dlg?.showModal();
+    if (catalogId) fromCatalog();
+  });
+
+  async function fromCatalog() {
+    busy = true;
+    error = '';
+    step = 'loading';
+    try {
+      const r = await api.fetchCatalogPackage(catalogId);
+      uploadId = r.upload_id;
+      preview = r.preview;
+      trusted = false;
+      step = 'preview';
+    } catch (e) {
+      error = e.message;
+    } finally {
+      busy = false;
+    }
+  }
 
   function close() {
     dlg?.close();
@@ -70,7 +92,17 @@
 
     {#if error}<div class="alert alert-error text-sm mb-3" role="alert" data-testid="install-error"><TriangleAlert size={16} /> {error}</div>{/if}
 
-    {#if step === 'source'}
+    {#if step === 'loading'}
+      <div class="flex items-center gap-2 py-6 justify-center" data-testid="install-catalog-loading">
+        {#if busy}<span class="loading loading-spinner"></span> Скачиваем и проверяем пакет из каталога…{/if}
+      </div>
+      {#if !busy}
+        <div class="modal-action mt-0">
+          <button type="button" class="btn" onclick={close}>Закрыть</button>
+          <button type="button" class="btn btn-primary" onclick={fromCatalog}>Повторить</button>
+        </div>
+      {/if}
+    {:else if step === 'source'}
       <form class="grid gap-3" onsubmit={(e) => (e.preventDefault(), check())}>
         <div role="tablist" class="tabs tabs-box tabs-sm self-start">
           <button type="button" role="tab" class="tab gap-1" class:tab-active={kind === 'file'} onclick={() => (kind = 'file')}><Upload size={14} /> Файл</button>
@@ -160,8 +192,10 @@
         {/if}
       </div>
       <div class="modal-action">
-        <button class="btn mr-auto" onclick={() => ((step = 'source'), (preview = null), (error = ''))} disabled={busy}>Назад</button>
-        <button class="btn" onclick={close}>Отмена</button>
+        {#if !catalogId}
+          <button class="btn mr-auto" onclick={() => ((step = 'source'), (preview = null), (error = ''))} disabled={busy}>Назад</button>
+        {/if}
+        <button class="btn" class:mr-auto={!!catalogId} onclick={close}>Отмена</button>
         <button class="btn btn-primary" onclick={install} disabled={busy || !canInstall(preview, trusted)} data-testid="install-go">
           {#if busy}<span class="loading loading-spinner loading-sm"></span>{/if} {preview.update ? 'Обновить' : 'Установить'}
         </button>

@@ -2,12 +2,15 @@
   import { api } from '../lib/api.js';
   import PluginCard from '../components/PluginCard.svelte';
   import PluginInstall from '../components/PluginInstall.svelte';
+  import PluginCatalog from '../components/PluginCatalog.svelte';
   import { Upload, Puzzle } from 'lucide-svelte';
 
   let view = $state(null); // GET /plugins
   let error = $state('');
   let tab = $state('installed'); // installed | catalog
   let installing = $state(false);
+  let catalogId = $state(''); // install/update from the catalog
+  let catalogKey = $state(0); // remount the catalog after an install
 
   function load() {
     return api
@@ -41,11 +44,13 @@
 
 <div role="tablist" class="tabs tabs-border mb-4">
   <button role="tab" class="tab" class:tab-active={tab === 'installed'} onclick={() => (tab = 'installed')}>Установленные</button>
-  <button role="tab" class="tab" class:tab-active={tab === 'catalog'} onclick={() => (tab = 'catalog')}>Каталог</button>
+  <button role="tab" class="tab" class:tab-active={tab === 'catalog'} onclick={() => (tab = 'catalog')} data-testid="tab-catalog">Каталог</button>
 </div>
 
 {#if tab === 'catalog'}
-  <p class="opacity-70 py-8 text-center" data-testid="plugins-catalog">Каталог будет в следующем обновлении.</p>
+  {#key catalogKey}
+    <PluginCatalog {available} oninstall={(id) => (catalogId = id)} />
+  {/key}
 {:else if !view && !error}
   <div class="flex justify-center py-12"><span class="loading loading-spinner loading-lg"></span></div>
 {:else if view && plugins.length === 0}
@@ -63,4 +68,9 @@
 
 {#if installing}
   <PluginInstall onchanged={load} onclose={(changed) => ((installing = false), changed && load())} />
+{/if}
+{#if catalogId}
+  {#key catalogId}
+    <PluginInstall catalogId={catalogId} onchanged={load} onclose={(changed) => ((catalogId = ''), changed && (load(), catalogKey++))} />
+  {/key}
 {/if}

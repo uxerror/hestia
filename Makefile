@@ -2,7 +2,7 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X main.version=$(VERSION)
 export GOMAXPROCS ?= 4
 
-.PHONY: web server payload desktop test vet release
+.PHONY: web server payload desktop test vet release plugin plugin-publish
 
 web:
 	@if [ -f web/package.json ]; then cd web && npm ci && npm run build; else echo "web/package.json нет — пропуск"; fi
@@ -42,3 +42,48 @@ release:
 	@if gh auth status >/dev/null 2>&1; then \
 		gh release create $(VERSION) dist/* --verify-tag --notes-from-tag || gh release create $(VERSION) dist/* --verify-tag --generate-notes; \
 	else echo "gh не авторизован: релиз собран в dist/, публикация пропущена"; fi
+
+# ---- plugins ----
+# PLUGIN_KEY signs official plugins and the catalog (hestia-release
+# plugin-keygen); a third-party author passes their own key.
+PLUGIN_KEY ?= $(HOME)/.config/hestia/plugins.key
+PLUGIN_PKG = dist/plugins/$(ID)-$(VERSION)-linux-amd64.hpkg
+CATALOG_TAG = plugins-catalog
+
+define plugin_args
+	@test -n "$(ID)" && test -d plugins/$(ID) || { echo "ID=<id> обязателен (каталог plugins/<id>)"; exit 1; }
+	@case "$(VERSION)" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "VERSION=vX.Y.Z обязателен (как в plugins/$(ID)/manifest.json)"; exit 1;; esac
+endef
+
+# plugin builds and signs a plugin package, e.g.
+#   make plugin ID=hestia-hello VERSION=v0.2.0
+# VERSION must match manifest.json (plugin-pack checks it).
+plugin:
+	$(plugin_args)
+	mkdir -p build/plugins/$(ID) dist/plugins
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags '-s -w' -o build/plugins/$(ID)/plugin ./plugins/$(ID)
+	go run ./cmd/hestia-release plugin-pack --key '$(PLUGIN_KEY)' --dir build/plugins/$(ID) --src plugins/$(ID) --out dist/plugins --version $(VERSION)
+	go run ./cmd/hestia-release plugin-verify $(PLUGIN_PKG)
+
+# plugin-publish tags HEAD as plugin/<id>/<version> (clean tree only), adds the
+# package to the catalog (index.json from the release, if there is one) and
+# uploads the package, index.json and index.json.sig to the release
+# "plugins-catalog" (created as a pre-release, so it never becomes "latest"
+# for the Hestia update check). Only on the maintainer's word.
+plugin-publish:
+	$(plugin_args)
+	@test -z "$$(git status --porcelain)" || { echo "рабочее дерево не чистое"; exit 1; }
+	@gh auth status >/dev/null 2>&1 || { echo "gh не авторизован (gh auth login)"; exit 1; }
+	$(MAKE) plugin ID=$(ID) VERSION=$(VERSION)
+	@if git rev-parse -q --verify 'refs/tags/plugin/$(ID)/$(VERSION)' >/dev/null; then \
+		test "$$(git rev-parse 'plugin/$(ID)/$(VERSION)^{commit}')" = "$$(git rev-parse HEAD)" || { echo "тег plugin/$(ID)/$(VERSION) указывает не на HEAD"; exit 1; }; \
+	else git tag -a 'plugin/$(ID)/$(VERSION)' -m '$(ID) $(VERSION)' HEAD; fi
+	git push origin 'refs/tags/plugin/$(ID)/$(VERSION)'
+	@gh release view $(CATALOG_TAG) >/dev/null 2>&1 || \
+		gh release create $(CATALOG_TAG) --prerelease --latest=false --title 'Каталог плагинов Hestia' \
+			--notes 'Официальные плагины Hestia: index.json (подписан ключом плагинов) и пакеты .hpkg.'
+	rm -f dist/plugins/index.json dist/plugins/index.json.sig
+	@if gh release view $(CATALOG_TAG) --json assets -q '.assets[].name' | grep -qx index.json; then \
+		gh release download $(CATALOG_TAG) -p index.json -D dist/plugins; fi
+	go run ./cmd/hestia-release catalog-add --index dist/plugins/index.json --key '$(PLUGIN_KEY)' $(PLUGIN_PKG)
+	gh release upload $(CATALOG_TAG) $(PLUGIN_PKG) dist/plugins/index.json dist/plugins/index.json.sig --clobber

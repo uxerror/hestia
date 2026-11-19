@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -66,23 +67,37 @@ func (g *GitHub) get(ctx context.Context, url, accept string) (*http.Response, e
 
 // Latest returns the latest published release.
 func (g *GitHub) Latest(ctx context.Context) (Release, error) {
-	base, repo := g.BaseURL, g.Repo
+	return g.release(ctx, "releases/latest", "релизов пока нет")
+}
+
+// ReleaseByTag returns the release with the given tag (pre-releases too).
+func (g *GitHub) ReleaseByTag(ctx context.Context, tag string) (Release, error) {
+	return g.release(ctx, "releases/tags/"+url.PathEscape(tag), "релиза "+tag+" нет")
+}
+
+// Repository returns the repository with releases ("owner/name").
+func (g *GitHub) Repository() string {
+	if g.Repo != "" {
+		return g.Repo
+	}
+	return updateRepo
+}
+
+func (g *GitHub) release(ctx context.Context, path, notFound string) (Release, error) {
+	base := g.BaseURL
 	if base == "" {
 		base = DefaultAPI
 	}
-	if repo == "" {
-		repo = updateRepo
-	}
 	ctx, cancel := context.WithTimeout(ctx, checkTimeout)
 	defer cancel()
-	resp, err := g.get(ctx, strings.TrimRight(base, "/")+"/repos/"+repo+"/releases/latest", "application/vnd.github+json")
+	resp, err := g.get(ctx, strings.TrimRight(base, "/")+"/repos/"+g.Repository()+"/"+path, "application/vnd.github+json")
 	if err != nil {
 		return Release{}, err
 	}
 	defer resp.Body.Close()
 	switch {
 	case resp.StatusCode == http.StatusNotFound:
-		return Release{}, errors.New("релизов пока нет")
+		return Release{}, errors.New(notFound)
 	case resp.StatusCode != http.StatusOK:
 		return Release{}, fmt.Errorf("GitHub ответил %s", resp.Status)
 	}

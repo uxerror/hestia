@@ -412,3 +412,45 @@ func (s *Store) DeleteSecretsByPurpose(ctx context.Context, purpose string) erro
 	_, err := s.db.ExecContext(ctx, `DELETE FROM secrets WHERE purpose = ?`, purpose)
 	return err
 }
+
+// PluginCatalog is the cached official catalog: IndexJSON is set only after
+// its signature was verified; Error is the last failure ("" after success).
+type PluginCatalog struct {
+	FetchedAt *time.Time
+	IndexJSON string
+	Error     string
+}
+
+// GetPluginCatalog returns the cached catalog (zero value if never fetched).
+func (s *Store) GetPluginCatalog(ctx context.Context) (PluginCatalog, error) {
+	var (
+		c   PluginCatalog
+		at  sql.NullInt64
+		idx sql.NullString
+	)
+	err := s.db.QueryRowContext(ctx, `SELECT fetched_at, index_json, error FROM plugin_catalog WHERE id = 1`).Scan(&at, &idx, &c.Error)
+	if errors.Is(err, sql.ErrNoRows) {
+		return PluginCatalog{}, nil
+	}
+	if err != nil {
+		return c, err
+	}
+	if at.Valid {
+		t := fromMS(at.Int64)
+		c.FetchedAt = &t
+	}
+	c.IndexJSON = idx.String
+	return c, nil
+}
+
+// SetPluginCatalog stores the catalog state.
+func (s *Store) SetPluginCatalog(ctx context.Context, c PluginCatalog) error {
+	var idx any
+	if c.IndexJSON != "" {
+		idx = c.IndexJSON
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO plugin_catalog(id, fetched_at, index_json, error) VALUES (1, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET fetched_at = excluded.fetched_at, index_json = excluded.index_json, error = excluded.error`,
+		nullMS(c.FetchedAt), idx, c.Error)
+	return err
+}
