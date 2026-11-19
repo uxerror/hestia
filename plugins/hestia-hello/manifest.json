@@ -5,7 +5,7 @@
   "version": "v0.1.0",
   "description": "Демонстрационный плагин: записывает приветствие в файл на выбранном сервере",
   "homepage": "https://github.com/uxerror/hestia",
-  "author": {"name": "uxerror", "key": ""},
+  "author": {"name": "uxerror", "key": "v/i7jzbuZQGgOed7Q04PAQy3kj8U1gODTDdZdx2IXbo="},
   "min_hestia": "v0.1.0",
   "permissions": ["targets.read", "targets.exec"],
   "provides": [{"type": "demo.hello"}],
