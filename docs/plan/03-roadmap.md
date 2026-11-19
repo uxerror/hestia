@@ -10,8 +10,10 @@ selfinstall) как вариант цели развёртывания; авто
 
 1. **Этап 1** — подключение, самоустановка, обзор сети, AdGuard → hestia.home (02-stage-1.md).
 2. **Основа (плагины-фундамент)**
-   - CA: на базе собственного certbot (MyHomeCA, сроки 90 дн., выдача по токену) →
-     HTTPS для самой Hestia;
+   - CA: плагин HestiaCA (02j) — новый корень Hestia (код на основе собственного certbot),
+     сертификаты 90 дн. с автопродлением → HTTPS для самой Hestia. После 2a-3: ACME-сервер, выдача
+     по токену для VM вне Hestia, перенос сервисов с существующего домашнего CA, доверие на
+     телефонах/macOS/Windows, OCSP/CRL, wildcard, ограничение доступа к API CA по IP;
    - DNS: AdGuard (adopt существующего или установка) — управление rewrite из Hestia;
    - reverse proxy: adopt Nginx Proxy Manager или свой; авто-проксирование новых сервисов.
 3. **Агент ПК (Linux)** — доверие к CA, mount шар (systemd .mount/.automount, креды 600),
