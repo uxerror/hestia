@@ -10,17 +10,17 @@ import (
 	"strings"
 	"testing"
 
-	"hestia/internal/api"
-	"hestia/internal/auth"
-	"hestia/internal/inventory"
-	"hestia/internal/jobs"
-	"hestia/internal/onboard"
-	"hestia/internal/secrets"
-	"hestia/internal/selfinstall"
-	"hestia/internal/sshx"
-	"hestia/internal/store"
-	"hestia/internal/testelf"
-	"hestia/internal/update"
+	"github.com/uxerror/hestia/internal/api"
+	"github.com/uxerror/hestia/internal/auth"
+	"github.com/uxerror/hestia/internal/inventory"
+	"github.com/uxerror/hestia/internal/jobs"
+	"github.com/uxerror/hestia/internal/onboard"
+	"github.com/uxerror/hestia/internal/secrets"
+	"github.com/uxerror/hestia/internal/selfinstall"
+	"github.com/uxerror/hestia/internal/sshx"
+	"github.com/uxerror/hestia/internal/store"
+	"github.com/uxerror/hestia/internal/testelf"
+	"github.com/uxerror/hestia/internal/update"
 )
 
 // machine is a controller host that only knows `hestia.new version`.

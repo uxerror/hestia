@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"hestia/internal/onboard"
-	"hestia/internal/store"
+	"github.com/uxerror/hestia/internal/onboard"
+	"github.com/uxerror/hestia/internal/store"
 )
 
 func (s *server) identity(w http.ResponseWriter, r *http.Request) {

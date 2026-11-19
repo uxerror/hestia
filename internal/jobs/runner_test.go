@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"hestia/internal/store"
+	"github.com/uxerror/hestia/internal/store"
 )
 
 func newStore(t *testing.T) *store.Store {

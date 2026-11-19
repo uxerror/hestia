@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"hestia/internal/update"
+	"github.com/uxerror/hestia/internal/update"
 )
 
 func (s *server) updateError(w http.ResponseWriter, r *http.Request, err error) {

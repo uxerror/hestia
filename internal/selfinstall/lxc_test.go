@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"hestia/internal/auth"
-	"hestia/internal/secrets"
-	"hestia/internal/selfinstall"
-	"hestia/internal/store"
+	"github.com/uxerror/hestia/internal/auth"
+	"github.com/uxerror/hestia/internal/secrets"
+	"github.com/uxerror/hestia/internal/selfinstall"
+	"github.com/uxerror/hestia/internal/store"
 )
 
 func asErr(t *testing.T, err error, status int, sub string) {

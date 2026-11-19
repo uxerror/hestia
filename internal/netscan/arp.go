@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"hestia/internal/netscan/oui"
+	"github.com/uxerror/hestia/internal/netscan/oui"
 )
 
 // ARP gives access to the neighbour table of the machine Hestia runs on.

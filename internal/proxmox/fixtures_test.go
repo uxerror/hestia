@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"hestia/internal/proxmox"
-	"hestia/internal/sshx"
-	"hestia/internal/target"
+	"github.com/uxerror/hestia/internal/proxmox"
+	"github.com/uxerror/hestia/internal/sshx"
+	"github.com/uxerror/hestia/internal/target"
 )
 
 // Real outputs of a PVE 9.2 cluster ("home": pve, pve1, pve2), see testdata.

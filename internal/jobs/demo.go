@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"hestia/internal/store"
+	"github.com/uxerror/hestia/internal/store"
 )
 
 // Demo starts the demonstration job: three ~1 s steps with log lines. It only

@@ -12,7 +12,7 @@ import (
 )
 
 // updateRepo is the GitHub repository with releases; set at build time with
-// -ldflags "-X hestia/internal/update.updateRepo=owner/name".
+// -ldflags "-X github.com/uxerror/hestia/internal/update.updateRepo=owner/name".
 var updateRepo = "uxerror/hestia"
 
 // DefaultAPI is the GitHub API base URL.

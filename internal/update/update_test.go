@@ -14,11 +14,11 @@ import (
 	"testing"
 	"time"
 
-	"hestia/internal/jobs"
-	"hestia/internal/selfinstall"
-	"hestia/internal/sshx"
-	"hestia/internal/store"
-	"hestia/internal/testelf"
+	"github.com/uxerror/hestia/internal/jobs"
+	"github.com/uxerror/hestia/internal/selfinstall"
+	"github.com/uxerror/hestia/internal/sshx"
+	"github.com/uxerror/hestia/internal/store"
+	"github.com/uxerror/hestia/internal/testelf"
 )
 
 // fakeShell is the controller's machine: it records what is written and run.

@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"hestia/internal/proxmox"
+	"github.com/uxerror/hestia/internal/proxmox"
 )
 
 // Real outputs of PVE 9.2 (`pvesh … --output-format json`), see testdata.

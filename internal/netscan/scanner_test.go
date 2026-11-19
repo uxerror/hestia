@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"hestia/internal/netscan/oui"
+	"github.com/uxerror/hestia/internal/netscan/oui"
 )
 
 func TestOUI(t *testing.T) {

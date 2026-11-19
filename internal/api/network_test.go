@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"hestia/internal/store"
+	"github.com/uxerror/hestia/internal/store"
 )
 
 func TestNetworkEndpointsRequireAuth(t *testing.T) {

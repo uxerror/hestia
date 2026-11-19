@@ -4,8 +4,8 @@ import (
 	"errors"
 	"net/http"
 
-	"hestia/internal/netscan"
-	"hestia/internal/store"
+	"github.com/uxerror/hestia/internal/netscan"
+	"github.com/uxerror/hestia/internal/store"
 )
 
 func (s *server) networkView(w http.ResponseWriter, r *http.Request) {

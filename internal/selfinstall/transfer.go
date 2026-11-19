@@ -7,9 +7,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"hestia/internal/auth"
-	"hestia/internal/secrets"
-	"hestia/internal/store"
+	"github.com/uxerror/hestia/internal/auth"
+	"github.com/uxerror/hestia/internal/secrets"
+	"github.com/uxerror/hestia/internal/store"
 )
 
 // bundle is the state shipped to the new controller.

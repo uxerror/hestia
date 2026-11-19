@@ -9,9 +9,9 @@ import (
 	"sync"
 	"testing"
 
-	"hestia/internal/sshx"
-	"hestia/internal/sshx/sshxtest"
-	"hestia/internal/target"
+	"github.com/uxerror/hestia/internal/sshx"
+	"github.com/uxerror/hestia/internal/sshx/sshxtest"
+	"github.com/uxerror/hestia/internal/target"
 )
 
 // fakeFS interprets just the commands package target emits.

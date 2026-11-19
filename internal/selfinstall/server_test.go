@@ -6,9 +6,9 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
-	"hestia/internal/selfinstall"
-	"hestia/internal/sshx/sshxtest"
-	"hestia/internal/store"
+	"github.com/uxerror/hestia/internal/selfinstall"
+	"github.com/uxerror/hestia/internal/sshx/sshxtest"
+	"github.com/uxerror/hestia/internal/store"
 )
 
 // newServerEnv connects a standalone server (kind ssh) backed by a fake

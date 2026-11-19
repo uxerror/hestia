@@ -1,0 +1,26 @@
+{
+  "protocol": 1,
+  "id": "hestia-hello",
+  "name": "Hestia Hello",
+  "version": "v0.1.0",
+  "description": "Демонстрационный плагин: записывает приветствие в файл на выбранном сервере",
+  "homepage": "https://github.com/uxerror/hestia",
+  "author": {"name": "uxerror", "key": ""},
+  "min_hestia": "v0.1.0",
+  "permissions": ["targets.read", "targets.exec"],
+  "provides": [{"type": "demo.hello"}],
+  "requires": [],
+  "multi_instance": true,
+  "schema": {
+    "fields": [
+      {"name": "target", "type": "target", "label": "Где записать", "required": true,
+       "help": "Сервер или контейнер, на котором появится файл /tmp/hestia-hello-<номер экземпляра>"},
+      {"name": "message", "type": "string", "label": "Приветствие", "default": "Привет от Hestia",
+       "max_len": 200, "required": true}
+    ],
+    "presets": [
+      {"name": "default", "label": "По умолчанию", "values": {}},
+      {"name": "english", "label": "По-английски", "values": {"message": "Hello from Hestia"}}
+    ]
+  }
+}

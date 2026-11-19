@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"time"
 
-	"hestia/internal/jobs"
-	"hestia/internal/proxmox"
-	"hestia/internal/sshx"
-	"hestia/internal/store"
-	"hestia/internal/target"
+	"github.com/uxerror/hestia/internal/jobs"
+	"github.com/uxerror/hestia/internal/proxmox"
+	"github.com/uxerror/hestia/internal/sshx"
+	"github.com/uxerror/hestia/internal/store"
+	"github.com/uxerror/hestia/internal/target"
 )
 
 // RolePlan describes what "complete the Hestia role" would change on a

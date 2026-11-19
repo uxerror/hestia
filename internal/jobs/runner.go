@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"hestia/internal/store"
+	"github.com/uxerror/hestia/internal/store"
 )
 
 // InterruptedMsg is the error set on jobs left unfinished by a restart.
@@ -232,4 +232,37 @@ func (r *Run) Step(title string, fn func(ctx context.Context) error) error {
 
 func (r *Run) emitStep(st store.Step, msg string) {
 	r.runner.hub.Publish(r.jobID, Event{Type: "step", Data: StepEvent{Idx: st.Idx, Title: st.Title, Status: st.Status, Error: msg}})
+}
+
+// BeginStep starts a step whose end is reported later through the returned
+// function (steps driven by another process, e.g. a plugin). The function
+// may be called once; a non-nil error fails the step and the job.
+func (r *Run) BeginStep(title string) func(err error) {
+	bg := context.Background()
+	r.mu.Lock()
+	idx := r.next
+	r.next++
+	r.mu.Unlock()
+	now := time.Now().UTC()
+	st := store.Step{Idx: idx, Title: title, Status: store.StepRunning, StartedAt: &now}
+	_ = r.runner.store.InsertStep(bg, r.jobID, st)
+	r.emitStep(st, "")
+	var once sync.Once
+	return func(err error) {
+		once.Do(func() {
+			fin := time.Now().UTC()
+			status, msg := store.StepDone, ""
+			if err != nil {
+				status, msg = store.StepFailed, err.Error()
+				r.mu.Lock()
+				if r.stepErr == nil {
+					r.stepErr = err
+				}
+				r.mu.Unlock()
+			}
+			_ = r.runner.store.UpdateStep(bg, r.jobID, idx, status, &fin, msg)
+			st.Status = status
+			r.emitStep(st, msg)
+		})
+	}
 }

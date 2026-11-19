@@ -220,6 +220,52 @@ CREATE TABLE dns_names (
 	created_at     INTEGER NOT NULL
 );
 `},
+	{8, `
+CREATE TABLE plugin_authors (
+	key       TEXT PRIMARY KEY,
+	name      TEXT NOT NULL,
+	official  INTEGER NOT NULL,
+	pinned_at INTEGER NOT NULL
+);
+CREATE TABLE plugins (
+	id           TEXT PRIMARY KEY,
+	version      TEXT NOT NULL,
+	prev_version TEXT NOT NULL DEFAULT '',
+	author_key   TEXT NOT NULL REFERENCES plugin_authors(key),
+	manifest     TEXT NOT NULL,
+	source       TEXT NOT NULL,
+	enabled      INTEGER NOT NULL DEFAULT 1,
+	token_hash   TEXT NOT NULL,
+	readme       TEXT NOT NULL DEFAULT '',
+	icon         TEXT NOT NULL DEFAULT '',
+	installed_at INTEGER NOT NULL,
+	updated_at   INTEGER NOT NULL
+);
+CREATE TABLE plugin_instances (
+	id         INTEGER PRIMARY KEY,
+	plugin_id  TEXT NOT NULL REFERENCES plugins(id),
+	name       TEXT NOT NULL,
+	config     TEXT NOT NULL,
+	status     TEXT NOT NULL DEFAULT 'unknown',
+	detail     TEXT NOT NULL DEFAULT '',
+	endpoints  TEXT NOT NULL DEFAULT '[]',
+	checked_at INTEGER,
+	created_at INTEGER NOT NULL,
+	UNIQUE (plugin_id, name)
+);
+CREATE TABLE plugin_grants (
+	instance_id INTEGER NOT NULL REFERENCES plugin_instances(id) ON DELETE CASCADE,
+	target_kind TEXT NOT NULL,
+	target_ref  TEXT NOT NULL,
+	PRIMARY KEY (instance_id, target_kind, target_ref)
+);
+CREATE TABLE plugin_catalog (
+	id         INTEGER PRIMARY KEY CHECK (id = 1),
+	fetched_at INTEGER,
+	index_json TEXT,
+	error      TEXT NOT NULL DEFAULT ''
+);
+`},
 }
 
 // KnownSchema is the newest schema version this binary can work with.

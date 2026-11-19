@@ -10,7 +10,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
-	"hestia/internal/sshx/sshxtest"
+	"github.com/uxerror/hestia/internal/sshx/sshxtest"
 )
 
 func (e *env) login(t *testing.T) {

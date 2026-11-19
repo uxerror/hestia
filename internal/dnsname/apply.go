@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"hestia/internal/integrations/adguard"
-	"hestia/internal/jobs"
-	"hestia/internal/store"
+	"github.com/uxerror/hestia/internal/integrations/adguard"
+	"github.com/uxerror/hestia/internal/jobs"
+	"github.com/uxerror/hestia/internal/store"
 )
 
 // JobKind is the kind of the job that applies a plan.

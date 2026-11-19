@@ -11,11 +11,11 @@ import (
 	"sync"
 	"time"
 
-	"hestia/internal/jobs"
-	"hestia/internal/proxmox"
-	"hestia/internal/secrets"
-	"hestia/internal/sshx"
-	"hestia/internal/store"
+	"github.com/uxerror/hestia/internal/jobs"
+	"github.com/uxerror/hestia/internal/proxmox"
+	"github.com/uxerror/hestia/internal/secrets"
+	"github.com/uxerror/hestia/internal/sshx"
+	"github.com/uxerror/hestia/internal/store"
 )
 
 // SessionTTL is how long probe credentials stay in memory.

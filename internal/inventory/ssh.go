@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"hestia/internal/target"
+	"github.com/uxerror/hestia/internal/target"
 )
 
 // collectSSH gathers the facts of a standalone server over SSH with Hestia's

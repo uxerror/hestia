@@ -14,7 +14,7 @@ import (
 	"sync"
 	"testing"
 
-	"hestia/internal/store"
+	"github.com/uxerror/hestia/internal/store"
 )
 
 // wordSplit splits a command line like a POSIX shell (single quotes, and
@@ -246,6 +246,9 @@ func (m *fakeMachine) simple(c string, stdin []byte) (string, string, int) {
 		return "hestia " + m.version + "\n", "", 0
 	case "systemctl":
 		return m.systemctl(w[1:])
+	case "systemd-tmpfiles":
+		m.dirs["/run/hestia"] = true
+		return "", "", 0
 	case "ss":
 		port := 0
 		for _, a := range w {

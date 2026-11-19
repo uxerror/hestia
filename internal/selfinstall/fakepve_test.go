@@ -14,7 +14,7 @@ import (
 	"sync"
 	"testing"
 
-	"hestia/internal/proxmox"
+	"github.com/uxerror/hestia/internal/proxmox"
 )
 
 const (

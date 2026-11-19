@@ -13,12 +13,12 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
-	"hestia/internal/jobs"
-	"hestia/internal/proxmox"
-	"hestia/internal/secrets"
-	"hestia/internal/selfinstall"
-	"hestia/internal/sshx/sshxtest"
-	"hestia/internal/store"
+	"github.com/uxerror/hestia/internal/jobs"
+	"github.com/uxerror/hestia/internal/proxmox"
+	"github.com/uxerror/hestia/internal/secrets"
+	"github.com/uxerror/hestia/internal/selfinstall"
+	"github.com/uxerror/hestia/internal/sshx/sshxtest"
+	"github.com/uxerror/hestia/internal/store"
 )
 
 func ctxBG() context.Context { return context.Background() }

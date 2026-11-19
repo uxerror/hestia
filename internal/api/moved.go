@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"hestia/internal/selfinstall"
+	"github.com/uxerror/hestia/internal/selfinstall"
 )
 
 // NewMoved is the handler of a controller that moved to a server (remote.json

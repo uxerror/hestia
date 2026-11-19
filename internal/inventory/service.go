@@ -9,12 +9,12 @@ import (
 	"sync"
 	"time"
 
-	"hestia/internal/jobs"
-	"hestia/internal/proxmox"
-	"hestia/internal/secrets"
-	"hestia/internal/sshx"
-	"hestia/internal/store"
-	"hestia/internal/target"
+	"github.com/uxerror/hestia/internal/jobs"
+	"github.com/uxerror/hestia/internal/proxmox"
+	"github.com/uxerror/hestia/internal/secrets"
+	"github.com/uxerror/hestia/internal/sshx"
+	"github.com/uxerror/hestia/internal/store"
+	"github.com/uxerror/hestia/internal/target"
 )
 
 // JobKind is the kind of the refresh job.

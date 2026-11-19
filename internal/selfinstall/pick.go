@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"hestia/internal/proxmox"
+	"github.com/uxerror/hestia/internal/proxmox"
 )
 
 // Defaults of the controller container.

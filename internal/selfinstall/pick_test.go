@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"hestia/internal/proxmox"
-	"hestia/internal/selfinstall"
+	"github.com/uxerror/hestia/internal/proxmox"
+	"github.com/uxerror/hestia/internal/selfinstall"
 )
 
 func load[T any](t *testing.T, name string) T {

@@ -7,9 +7,9 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
-	"hestia/internal/onboard"
-	"hestia/internal/sshx/sshxtest"
-	"hestia/internal/store"
+	"github.com/uxerror/hestia/internal/onboard"
+	"github.com/uxerror/hestia/internal/sshx/sshxtest"
+	"github.com/uxerror/hestia/internal/store"
 )
 
 func nodeByName(res *onboard.ProbeResult, name string) store.Node {

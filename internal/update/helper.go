@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"hestia/internal/version"
+	"github.com/uxerror/hestia/internal/version"
 )
 
 // Helper is the loopback endpoint of the desktop app that hands its embedded

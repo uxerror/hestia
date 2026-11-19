@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"hestia/internal/proxmox"
+	"github.com/uxerror/hestia/internal/proxmox"
 )
 
 // RequestTimeout bounds one request to AdGuard.

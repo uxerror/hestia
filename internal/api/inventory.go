@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"hestia/internal/store"
+	"github.com/uxerror/hestia/internal/store"
 )
 
 func (s *server) inventoryError(w http.ResponseWriter, r *http.Request, err error) {

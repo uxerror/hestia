@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"hestia/internal/proxmox"
-	"hestia/internal/sshx"
-	"hestia/internal/store"
-	"hestia/internal/target"
+	"github.com/uxerror/hestia/internal/proxmox"
+	"github.com/uxerror/hestia/internal/sshx"
+	"github.com/uxerror/hestia/internal/store"
+	"github.com/uxerror/hestia/internal/target"
 )
 
 // ProbeRequest is the body of POST /targets/probe. Password, PrivateKey and

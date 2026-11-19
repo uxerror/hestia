@@ -10,8 +10,8 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
-	"hestia/internal/sshx"
-	"hestia/internal/sshx/sshxtest"
+	"github.com/uxerror/hestia/internal/sshx"
+	"github.com/uxerror/hestia/internal/sshx/sshxtest"
 )
 
 func newServer(t *testing.T) *sshxtest.Server {

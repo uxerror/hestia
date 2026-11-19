@@ -10,16 +10,17 @@ import (
 	"path"
 	"strings"
 
-	"hestia/internal/auth"
-	"hestia/internal/dnsname"
-	"hestia/internal/inventory"
-	"hestia/internal/jobs"
-	"hestia/internal/netscan"
-	"hestia/internal/onboard"
-	"hestia/internal/secrets"
-	"hestia/internal/selfinstall"
-	"hestia/internal/store"
-	"hestia/internal/update"
+	"github.com/uxerror/hestia/internal/auth"
+	"github.com/uxerror/hestia/internal/dnsname"
+	"github.com/uxerror/hestia/internal/inventory"
+	"github.com/uxerror/hestia/internal/jobs"
+	"github.com/uxerror/hestia/internal/netscan"
+	"github.com/uxerror/hestia/internal/onboard"
+	"github.com/uxerror/hestia/internal/plugins"
+	"github.com/uxerror/hestia/internal/secrets"
+	"github.com/uxerror/hestia/internal/selfinstall"
+	"github.com/uxerror/hestia/internal/store"
+	"github.com/uxerror/hestia/internal/update"
 )
 
 // Config holds the dependencies of the HTTP handler.
@@ -41,7 +42,9 @@ type Config struct {
 	// DNS gives the controller a name through AdGuard Home (optional in tests).
 	DNS *dnsname.Service
 	// Update updates the installed controller (optional in tests).
-	Update     *update.Service
+	Update *update.Service
+	// Plugins installs and runs plugins (optional in tests).
+	Plugins    *plugins.Manager
 	InstanceID string
 	Web        fs.FS  // built frontend rooted at index.html
 	Mode       string // "serve" or "desktop"
@@ -117,6 +120,26 @@ func New(cfg Config) http.Handler {
 		mux.HandleFunc("POST /api/v1/update/check", s.requireAuth(s.updateCheck))
 		mux.HandleFunc("POST /api/v1/update/upload", s.requireAuth(s.updateUpload))
 		mux.HandleFunc("POST /api/v1/update", s.requireAuth(s.updateStart))
+	}
+
+	if cfg.Plugins != nil {
+		mux.HandleFunc("GET /api/v1/plugins", s.requireAuth(s.pluginsList))
+		mux.HandleFunc("GET /api/v1/plugins/catalog", s.requireAuth(s.pluginCatalogLater))
+		mux.HandleFunc("POST /api/v1/plugins/catalog/refresh", s.requireAuth(s.pluginCatalogLater))
+		mux.HandleFunc("POST /api/v1/plugins/packages/catalog", s.requireAuth(s.pluginCatalogLater))
+		mux.HandleFunc("POST /api/v1/plugins/packages", s.requireAuth(s.pluginUpload))
+		mux.HandleFunc("POST /api/v1/plugins/packages/fetch", s.requireAuth(s.pluginFetch))
+		mux.HandleFunc("POST /api/v1/plugins/install", s.requireAuth(s.pluginInstall))
+		mux.HandleFunc("GET /api/v1/plugins/targets", s.requireAuth(s.pluginTargets))
+		mux.HandleFunc("GET /api/v1/plugins/authors", s.requireAuth(s.pluginAuthors))
+		mux.HandleFunc("DELETE /api/v1/plugins/authors/{key}", s.requireAuth(s.pluginForgetAuthor))
+		mux.HandleFunc("GET /api/v1/plugins/{id}", s.requireAuth(s.pluginGet))
+		mux.HandleFunc("DELETE /api/v1/plugins/{id}", s.requireAuth(s.pluginRemove))
+		mux.HandleFunc("POST /api/v1/plugins/{id}/enable", s.requireAuth(s.pluginEnable(true)))
+		mux.HandleFunc("POST /api/v1/plugins/{id}/disable", s.requireAuth(s.pluginEnable(false)))
+		mux.HandleFunc("GET /api/v1/plugins/{a}/{b}", s.requireAuth(s.pluginsSub))
+		mux.HandleFunc("POST /api/v1/plugins/{a}/{b}/plan", s.requireAuth(s.pluginsPlan))
+		mux.HandleFunc("POST /api/v1/plugins/plans/{plan}/apply", s.requireAuth(s.pluginApply))
 	}
 
 	// Unknown API paths must not fall through to the SPA.

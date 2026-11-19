@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"hestia/internal/store"
+	"github.com/uxerror/hestia/internal/store"
 )
 
 func newSvc(t *testing.T) (*Service, *store.Store, string) {

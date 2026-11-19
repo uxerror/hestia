@@ -3,7 +3,10 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/uxerror/hestia/internal/testelf"
 )
 
 func TestKeygenSignVerify(t *testing.T) {
@@ -46,5 +49,43 @@ func TestKeygenSignVerify(t *testing.T) {
 	}
 	if run([]string{"nonsense"}) != 2 || run(nil) != 2 {
 		t.Fatal("usage")
+	}
+}
+
+func TestPluginPackVerify(t *testing.T) {
+	tmp := t.TempDir()
+	key, pub := filepath.Join(tmp, "plugins.key"), filepath.Join(tmp, "official.pub")
+	if run([]string{"plugin-keygen", "--out", key, "--pub", pub}) != 0 {
+		t.Fatal("plugin-keygen")
+	}
+	pubKey, _ := os.ReadFile(pub)
+	build, src := filepath.Join(tmp, "build", "demo"), filepath.Join(tmp, "src")
+	_ = os.MkdirAll(build, 0o755)
+	_ = os.MkdirAll(src, 0o755)
+	_ = os.WriteFile(filepath.Join(build, "plugin"), testelf.Build(testelf.Opts{}), 0o755)
+	manifest := `{"protocol":1,"id":"demo","name":"Demo","version":"v0.1.0","description":"d",
+		"author":{"name":"me","key":"` + strings.TrimSpace(string(pubKey)) + `"},"permissions":["targets.read"],
+		"schema":{"fields":[]}}`
+	_ = os.WriteFile(filepath.Join(src, "manifest.json"), []byte(manifest), 0o644)
+	_ = os.WriteFile(filepath.Join(src, "README.md"), []byte("# Demo"), 0o644)
+	out := filepath.Join(tmp, "dist")
+	if run([]string{"plugin-pack", "--key", key, "--dir", build, "--src", src, "--out", out}) != 0 {
+		t.Fatal("plugin-pack")
+	}
+	pkg := filepath.Join(out, "demo-v0.1.0-linux-amd64.hpkg")
+	if run([]string{"plugin-verify", "--pub", pub, pkg}) != 0 {
+		t.Fatal("plugin-verify")
+	}
+	// A tampered package fails.
+	b, _ := os.ReadFile(pkg)
+	b[len(b)/2] ^= 0xff
+	_ = os.WriteFile(pkg, b, 0o644)
+	if run([]string{"plugin-verify", "--pub", pub, pkg}) == 0 {
+		t.Fatal("tampered package verified")
+	}
+	// A manifest without the signing key is refused by plugin-pack.
+	_ = os.WriteFile(filepath.Join(src, "manifest.json"), []byte(strings.Replace(manifest, strings.TrimSpace(string(pubKey)), "", 1)), 0o644)
+	if run([]string{"plugin-pack", "--key", key, "--dir", build, "--src", src, "--out", out}) == 0 {
+		t.Fatal("plugin-pack without author.key")
 	}
 }

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"hestia/internal/proxmox"
+	"github.com/uxerror/hestia/internal/proxmox"
 )
 
 func tlsServer(t *testing.T, wantAuth string) (host string, port int, fp string) {

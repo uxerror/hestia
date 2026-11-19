@@ -4,8 +4,8 @@ import (
 	"errors"
 	"net/http"
 
-	"hestia/internal/selfinstall"
-	"hestia/internal/store"
+	"github.com/uxerror/hestia/internal/selfinstall"
+	"github.com/uxerror/hestia/internal/store"
 )
 
 func (s *server) selfinstallError(w http.ResponseWriter, r *http.Request, err error) {

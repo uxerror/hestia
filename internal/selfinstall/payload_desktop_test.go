@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"hestia/internal/selfinstall"
+	"github.com/uxerror/hestia/internal/selfinstall"
 )
 
 // A desktop build compiled without payload/hestia-linux-amd64 must still

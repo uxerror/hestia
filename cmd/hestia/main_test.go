@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"hestia/internal/selfinstall"
+	"github.com/uxerror/hestia/internal/selfinstall"
 )
 
 // A data directory with remote.json starts in "moved" mode: the database is
@@ -20,7 +20,7 @@ func TestMovedModeDoesNotOpenDatabase(t *testing.T) {
 		Location: selfinstall.Location{Kind: "lxc", IP: "198.51.100.7"}}); err != nil {
 		t.Fatal(err)
 	}
-	a, err := newApp(context.Background(), dir, "serve")
+	a, err := newApp(context.Background(), dir, "serve", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +53,7 @@ func TestMovedModeDoesNotOpenDatabase(t *testing.T) {
 
 func TestNormalStartCreatesInstanceID(t *testing.T) {
 	dir := t.TempDir()
-	a, err := newApp(context.Background(), dir, "serve")
+	a, err := newApp(context.Background(), dir, "serve", "")
 	if err != nil {
 		t.Fatal(err)
 	}

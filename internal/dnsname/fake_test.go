@@ -14,12 +14,12 @@ import (
 	"testing"
 	"time"
 
-	"hestia/internal/integrations/adguard"
-	"hestia/internal/jobs"
-	"hestia/internal/netscan"
-	"hestia/internal/proxmox"
-	"hestia/internal/secrets"
-	"hestia/internal/store"
+	"github.com/uxerror/hestia/internal/integrations/adguard"
+	"github.com/uxerror/hestia/internal/jobs"
+	"github.com/uxerror/hestia/internal/netscan"
+	"github.com/uxerror/hestia/internal/proxmox"
+	"github.com/uxerror/hestia/internal/secrets"
+	"github.com/uxerror/hestia/internal/store"
 )
 
 const (

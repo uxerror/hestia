@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"hestia/internal/sshx"
+	"github.com/uxerror/hestia/internal/sshx"
 )
 
 // Result is the outcome of a command.

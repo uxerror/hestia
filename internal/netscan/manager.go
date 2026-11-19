@@ -13,10 +13,10 @@ import (
 	"sync"
 	"time"
 
-	"hestia/internal/inventory"
-	"hestia/internal/jobs"
-	"hestia/internal/netscan/oui"
-	"hestia/internal/store"
+	"github.com/uxerror/hestia/internal/inventory"
+	"github.com/uxerror/hestia/internal/jobs"
+	"github.com/uxerror/hestia/internal/netscan/oui"
+	"github.com/uxerror/hestia/internal/store"
 )
 
 // Job and settings names.

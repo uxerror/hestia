@@ -9,8 +9,8 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
-	"hestia/internal/sshx"
-	"hestia/internal/target"
+	"github.com/uxerror/hestia/internal/sshx"
+	"github.com/uxerror/hestia/internal/target"
 )
 
 // Where a Proxmox VE cluster keeps the SSH host keys of its nodes (shared

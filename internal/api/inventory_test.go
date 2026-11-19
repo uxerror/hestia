@@ -11,8 +11,8 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
-	"hestia/internal/sshx/sshxtest"
-	"hestia/internal/store"
+	"github.com/uxerror/hestia/internal/sshx/sshxtest"
+	"github.com/uxerror/hestia/internal/store"
 )
 
 func TestInventoryEndpointsRequireAuth(t *testing.T) {

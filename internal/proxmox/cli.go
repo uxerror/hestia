@@ -12,8 +12,8 @@ import (
 	"sort"
 	"strings"
 
-	"hestia/internal/sshx"
-	"hestia/internal/target"
+	"github.com/uxerror/hestia/internal/sshx"
+	"github.com/uxerror/hestia/internal/target"
 )
 
 // Names and constants of what Hestia creates on Proxmox.

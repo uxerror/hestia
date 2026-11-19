@@ -9,6 +9,10 @@ const (
 	unitPath    = "/etc/systemd/system/hestia.service"
 	dataPath    = "/var/lib/hestia"
 	svcUser     = "hestia"
+	// tmpfilesPath creates /run/hestia, the directory of the plugin socket
+	// (the controller opens the socket only when the directory exists).
+	tmpfilesPath = "/etc/tmpfiles.d/hestia.conf"
+	tmpfilesText = "# Installed by Hestia: the directory of the plugin socket.\nd /run/hestia 0755 hestia hestia -\n"
 )
 
 // unitText renders the systemd unit; port is the listen port.
@@ -28,7 +32,7 @@ NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
-ReadWritePaths=%[4]s
+ReadWritePaths=%[4]s -/run/hestia
 Restart=on-failure
 RestartSec=3
 

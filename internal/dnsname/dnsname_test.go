@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"hestia/internal/integrations/adguard"
-	"hestia/internal/netscan"
-	"hestia/internal/store"
+	"github.com/uxerror/hestia/internal/integrations/adguard"
+	"github.com/uxerror/hestia/internal/netscan"
+	"github.com/uxerror/hestia/internal/store"
 )
 
 var bg = context.Background()

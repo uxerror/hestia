@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"hestia/internal/selfinstall"
+	"github.com/uxerror/hestia/internal/selfinstall"
 )
 
 func TestRemoteFileRoundTrip(t *testing.T) {

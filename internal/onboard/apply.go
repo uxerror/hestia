@@ -7,12 +7,12 @@ import (
 	"strings"
 	"time"
 
-	"hestia/internal/jobs"
-	"hestia/internal/proxmox"
-	"hestia/internal/secrets"
-	"hestia/internal/sshx"
-	"hestia/internal/store"
-	"hestia/internal/target"
+	"github.com/uxerror/hestia/internal/jobs"
+	"github.com/uxerror/hestia/internal/proxmox"
+	"github.com/uxerror/hestia/internal/secrets"
+	"github.com/uxerror/hestia/internal/sshx"
+	"github.com/uxerror/hestia/internal/store"
+	"github.com/uxerror/hestia/internal/target"
 )
 
 // CreateRequest is the body of POST /targets.

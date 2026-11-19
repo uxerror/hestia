@@ -19,15 +19,15 @@ import (
 	"testing/fstest"
 	"time"
 
-	"hestia/internal/api"
-	"hestia/internal/auth"
-	"hestia/internal/dnsname"
-	"hestia/internal/inventory"
-	"hestia/internal/jobs"
-	"hestia/internal/netscan"
-	"hestia/internal/onboard"
-	"hestia/internal/secrets"
-	"hestia/internal/store"
+	"github.com/uxerror/hestia/internal/api"
+	"github.com/uxerror/hestia/internal/auth"
+	"github.com/uxerror/hestia/internal/dnsname"
+	"github.com/uxerror/hestia/internal/inventory"
+	"github.com/uxerror/hestia/internal/jobs"
+	"github.com/uxerror/hestia/internal/netscan"
+	"github.com/uxerror/hestia/internal/onboard"
+	"github.com/uxerror/hestia/internal/secrets"
+	"github.com/uxerror/hestia/internal/store"
 )
 
 type env struct {

@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"hestia/internal/integrations/adguard"
+	"github.com/uxerror/hestia/internal/integrations/adguard"
 )
 
 // FallbackZone is the zone used when AdGuard has no rewrites to learn it from.

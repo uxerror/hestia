@@ -15,9 +15,11 @@
   import Install from './pages/Install.svelte';
   import Moved from './pages/Moved.svelte';
   import UpdateOffer from './pages/UpdateOffer.svelte';
+  import Plugins from './pages/Plugins.svelte';
+  import PluginPage from './pages/PluginPage.svelte';
   import { updateInfo, loadUpdateInfo } from './lib/updateinfo.svelte.js';
   import { badgeText } from './lib/update.js';
-  import { Flame, LogOut, User } from 'lucide-svelte';
+  import { Flame, LogOut, User, Puzzle } from 'lucide-svelte';
 
   let route = $state(parseHash(location.hash));
   let loggingOut = $state(false);
@@ -52,7 +54,7 @@
     loggingOut = false;
   }
   const section = $derived(
-    route.name === 'jobs' || route.name === 'job' ? 'jobs' : route.name === 'map' ? 'map' : route.name === 'services' ? 'services' : route.name === 'targets' || route.name === 'guests' || route.name === 'install' || route.name === 'update-offer' ? 'targets' : 'wizard',
+    route.name === 'jobs' || route.name === 'job' ? 'jobs' : route.name === 'map' ? 'map' : route.name === 'services' ? 'services' : route.name === 'plugins' || route.name === 'plugin' ? 'plugins' : route.name === 'targets' || route.name === 'guests' || route.name === 'install' || route.name === 'update-offer' ? 'targets' : 'wizard',
   );
 </script>
 
@@ -81,6 +83,7 @@
           <li><a href="#/targets" class:menu-active={section === 'targets'}>Системы</a></li>
           <li><a href="#/map" class:menu-active={section === 'map'}>Карта сети</a></li>
           <li><a href="#/services" class:menu-active={section === 'services'}>Сервисы</a></li>
+          <li><a href="#/plugins" class:menu-active={section === 'plugins'}><Puzzle size={16} /> Плагины</a></li>
           <li><a href="#/jobs" class:menu-active={section === 'jobs'}>Задачи</a></li>
         </ul>
       </div>
@@ -104,6 +107,8 @@
       {:else if route.name === 'targets'}<Targets />
       {:else if route.name === 'map'}<NetMap />
       {:else if route.name === 'services'}<Services />
+      {:else if route.name === 'plugins'}<Plugins />
+      {:else if route.name === 'plugin'}{#key route.id}<PluginPage id={route.id} />{/key}
       {:else if route.name === 'install'}<Install />
       {:else if route.name === 'update-offer'}{#key route.hash}<UpdateOffer hash={route.hash} />{/key}
       {:else if route.name === 'guests'}{#key route.id}<Guests id={route.id} node={route.node} />{/key}

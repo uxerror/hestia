@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"time"
 
-	"hestia/internal/auth"
-	"hestia/internal/jobs"
-	"hestia/internal/store"
+	"github.com/uxerror/hestia/internal/auth"
+	"github.com/uxerror/hestia/internal/jobs"
+	"github.com/uxerror/hestia/internal/store"
 )
 
 type userDTO struct {

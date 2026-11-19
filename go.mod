@@ -1,4 +1,4 @@
-module hestia
+module github.com/uxerror/hestia
 
 go 1.26.0
 

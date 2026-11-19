@@ -6,8 +6,8 @@ import (
 	"sync"
 	"testing"
 
-	"hestia/internal/proxmox"
-	"hestia/internal/store"
+	"github.com/uxerror/hestia/internal/proxmox"
+	"github.com/uxerror/hestia/internal/store"
 )
 
 // connectProxmox connects the fake cluster and returns the stored target id.

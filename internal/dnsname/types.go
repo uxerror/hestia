@@ -3,7 +3,7 @@ package dnsname
 import (
 	"time"
 
-	"hestia/internal/store"
+	"github.com/uxerror/hestia/internal/store"
 )
 
 // Name statuses.

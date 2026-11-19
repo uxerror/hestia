@@ -442,3 +442,52 @@ GET    /api/v1/plugins/targets              кандидаты для поля `
 - **2a-1b:** `deploy.*` (Docker, features LXC, валидация compose, откат); каталог (`index.json`,
   проверка, вкладка «Каталог», обновления официальных); hestia-hello на whoami; Makefile
   `plugin`/`plugin-publish`; README для авторов.
+
+## Отклонения (по факту реализации 2a-1a)
+
+- **Сокет и `hestia.service`.** У юнита контроллера `ProtectSystem=strict` и `ReadWritePaths=/var/lib/hestia`:
+  `/run` для него только для чтения, и созданный tmpfiles каталог `/run/hestia` не помогает — сокет не
+  открыть без изменения юнита. Поэтому: selfinstall для новых установок пишет
+  `ReadWritePaths=/var/lib/hestia -/run/hestia` (и tmpfiles, как в спеке); установка плагина кладёт
+  drop-in `/etc/systemd/system/hestia.service.d/10-plugins.conf` (`ReadWritePaths=-/run/hestia`). Если
+  работающий контроллер (установлен до плагинов, CT 900) всё же не может открыть сокет, задача
+  установки откатывается с сообщением «контроллер перезапустится один раз — повторите установку» и
+  планирует `systemd-run --on-active=5 … systemctl restart hestia.service`. Это и есть «первый прыжок»,
+  которого спека хотела избежать: без перезапуска процесса namespace не поменять.
+- **Шаблон юнита плагина:** `StartLimitIntervalSec`/`StartLimitBurst` перенесены в `[Unit]` (их место в
+  современном systemd); `InaccessiblePaths=-/var/lib/hestia -/etc/hestia` — с `-`, иначе юнит не
+  стартует, если `/etc/hestia` нет (его нет). Сеть без `net.outbound` режет drop-in
+  `hestia-plugin@<id>.service.d/10-hestia.conf` со сбросом (`RestrictAddressFamilies=` +
+  `RestrictAddressFamilies=AF_UNIX`), т. к. списки семейств в systemd объединяются.
+- **Экземпляр создаётся черновиком при плане `create`** (`status='draft'`): у него сразу есть id (плагин
+  планирует с настоящим id, например путь `/tmp/hestia-hello-<id>`) и гранты целей из формы.
+  Черновики не видны в API, удаляются с истечением плана (15 мин), при старте, при новом плане с тем
+  же именем и при неудачном `apply` создания.
+- **Гранты при изменении:** пока идёт план или `apply` для `update`, экземпляру доступны и старые, и
+  новые цели; после успеха в БД остаются только новые.
+- **Секреты формы:** в `config` — ссылка `{"secret": "<поле>"}`, значение пишется в secrets
+  (`plugin:<id>:<экземпляр>:<поле>`) в начале задачи `apply`; при ошибке возвращается прежнее.
+  Пустое поле при изменении — «оставить прежнее».
+- **`target.exec`:** вывод обрезается до 1 МБ на поток (общий лимит `sshx`), а не 4 МБ. Команда —
+  `sh -c` от root (`sudo -n` для SSH не от root, `pct exec` с узла для LXC); `timeout_s` 60 по
+  умолчанию, максимум 3600.
+- **БД:** в `plugins` добавлены `readme` и `icon` (очищенный SVG); время — INTEGER (мс), как во всей
+  базе. Плагин `--plugin-dev` записывается в `plugins` с `source='dev'` и псевдоавтором `dev` (у
+  экземпляров должен быть родитель); сам флаг не хранится. dev-плагин не включается/отключается через
+  API, а пакет с тем же id блокирует dev-режим для него.
+- **API:** добавлены `GET /plugins/{id}` (манифест, README, `?unit=1` — `systemctl is-active` через
+  root-путь) и `GET /plugins/{id}/icon` (с CSP `sandbox`). Пути `/plugins/instances/{iid}` и
+  `/plugins/{id}/instances` (и их `/plan`) конфликтуют в mux Go и разбираются одним обработчиком;
+  поэтому id `authors`, `catalog`, `install`, `instances`, `packages`, `plans`, `targets` запрещены.
+  Каталог — 501, `deploy.*` в RPC — `-32601` «будет в следующем обновлении».
+- **Версии плагинов** — строго `vX.Y.Z`. **`plugin-pack`** требует, чтобы `author.key` в
+  `manifest.json` совпадал с ключом подписи (манифест вшит в бинарник и при установке сверяется с
+  пакетом); у `hestia-hello` ключ пуст, пока пользователь не создаст `plugins.key`. Флаг `--src` —
+  откуда брать `manifest.json`/`icon.svg`/`README.md` (по умолчанию `plugins/<имя --dir>`).
+- **Кандидаты целей:** SSH не от root считается «через sudo» (проверяется при выполнении);
+  `docker_capable` у SSH — Debian/Ubuntu по инвентарю, у LXC — всегда (ОС проверит план 2a-1b);
+  остановленный LXC недоступен.
+- **hestia-hello 2a-1a:** поля `target` и `message`, `provides: demo.hello`, права `targets.read`,
+  `targets.exec`; файл `/tmp/hestia-hello-<id>`.
+- **Состояние «не отвечает»** — `unresponsive` после трёх пропущенных `ping`; задачи плагина
+  (`plugin-*`) на один плагин не идут параллельно.

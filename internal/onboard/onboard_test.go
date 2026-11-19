@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"hestia/internal/onboard"
-	"hestia/internal/proxmox"
-	"hestia/internal/sshx/sshxtest"
-	"hestia/internal/store"
+	"github.com/uxerror/hestia/internal/onboard"
+	"github.com/uxerror/hestia/internal/proxmox"
+	"github.com/uxerror/hestia/internal/sshx/sshxtest"
+	"github.com/uxerror/hestia/internal/store"
 )
 
 func probeOK(t *testing.T, e *env, kind string) *onboard.ProbeResult {

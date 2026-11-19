@@ -9,12 +9,12 @@ import (
 	"strings"
 	"time"
 
-	"hestia/internal/jobs"
-	"hestia/internal/proxmox"
-	"hestia/internal/secrets"
-	"hestia/internal/sshx"
-	"hestia/internal/store"
-	"hestia/internal/target"
+	"github.com/uxerror/hestia/internal/jobs"
+	"github.com/uxerror/hestia/internal/proxmox"
+	"github.com/uxerror/hestia/internal/secrets"
+	"github.com/uxerror/hestia/internal/sshx"
+	"github.com/uxerror/hestia/internal/store"
+	"github.com/uxerror/hestia/internal/target"
 )
 
 // Result is what a finished installation reports to the UI. It is kept in
@@ -592,6 +592,14 @@ func (in *installer) stepUnit(ctx context.Context) error {
 	}
 	if _, err := in.logSh(ctx, "systemctl daemon-reload && systemctl enable hestia"); err != nil {
 		return fmt.Errorf("systemctl enable: %w", err)
+	}
+	// The directory for the plugin socket (plugins, stage 2a).
+	in.pushHost("удалить "+tmpfilesPath, "rm -f "+tmpfilesPath)
+	if err := in.putFile(ctx, tmpfilesPath, []byte(tmpfilesText), "0644", "root:root"); err != nil {
+		return err
+	}
+	if _, err := in.logSh(ctx, "systemd-tmpfiles --create "+tmpfilesPath); err != nil {
+		return fmt.Errorf("systemd-tmpfiles: %w", err)
 	}
 	return nil
 }

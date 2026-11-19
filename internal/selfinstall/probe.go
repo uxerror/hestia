@@ -14,12 +14,12 @@ import (
 
 	"os"
 
-	"hestia/internal/inventory"
-	"hestia/internal/proxmox"
-	"hestia/internal/secrets"
-	"hestia/internal/sshx"
-	"hestia/internal/store"
-	"hestia/internal/target"
+	"github.com/uxerror/hestia/internal/inventory"
+	"github.com/uxerror/hestia/internal/proxmox"
+	"github.com/uxerror/hestia/internal/secrets"
+	"github.com/uxerror/hestia/internal/sshx"
+	"github.com/uxerror/hestia/internal/store"
+	"github.com/uxerror/hestia/internal/target"
 )
 
 // ProbeRequest is the body of POST /selfinstall/probe. Zero fields take the

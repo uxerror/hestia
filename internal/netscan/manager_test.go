@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"hestia/internal/inventory"
-	"hestia/internal/jobs"
-	"hestia/internal/proxmox"
-	"hestia/internal/store"
+	"github.com/uxerror/hestia/internal/inventory"
+	"github.com/uxerror/hestia/internal/jobs"
+	"github.com/uxerror/hestia/internal/proxmox"
+	"github.com/uxerror/hestia/internal/store"
 )
 
 type fakeInv struct {

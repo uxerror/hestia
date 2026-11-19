@@ -17,10 +17,10 @@ import (
 	"strings"
 	"time"
 
-	"hestia/internal/jobs"
-	"hestia/internal/selfinstall"
-	"hestia/internal/store"
-	"hestia/internal/version"
+	"github.com/uxerror/hestia/internal/jobs"
+	"github.com/uxerror/hestia/internal/selfinstall"
+	"github.com/uxerror/hestia/internal/store"
+	"github.com/uxerror/hestia/internal/version"
 )
 
 //go:embed upgrade.sh

@@ -6,3 +6,4 @@ data/
 *.db
 *.local.env
 dist/
+build/plugins/

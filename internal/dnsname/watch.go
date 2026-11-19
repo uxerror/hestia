@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"hestia/internal/integrations/adguard"
-	"hestia/internal/store"
+	"github.com/uxerror/hestia/internal/integrations/adguard"
+	"github.com/uxerror/hestia/internal/store"
 )
 
 // evaluate compares the rewrites of AdGuard with the bound name and the

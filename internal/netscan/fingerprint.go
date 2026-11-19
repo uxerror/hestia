@@ -8,7 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"hestia/internal/netscan/oui"
+	"github.com/uxerror/hestia/internal/netscan/oui"
 )
 
 // HostResult is what a scan learned about one live address.

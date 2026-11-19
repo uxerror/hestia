@@ -1,0 +1,31 @@
+# Installed by Hestia: sandbox of a Hestia plugin (see docs/plan/02h).
+[Unit]
+Description=Hestia plugin %i
+PartOf=hestia.service
+After=hestia.service
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+ExecStart=/var/lib/hestia-plugins/%i/current/plugin
+Environment=HESTIA_SOCKET=/run/hestia/plugins.sock
+LoadCredential=token:/var/lib/hestia-plugins/%i/token
+DynamicUser=yes
+StateDirectory=hestia-plugin/%i
+ProtectSystem=strict
+ProtectHome=yes
+InaccessiblePaths=-/var/lib/hestia -/etc/hestia
+PrivateTmp=yes
+PrivateDevices=yes
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryMax=256M
+TasksMax=64
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=hestia.service

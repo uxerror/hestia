@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"hestia/internal/integrations/adguard"
-	"hestia/internal/store"
+	"github.com/uxerror/hestia/internal/integrations/adguard"
+	"github.com/uxerror/hestia/internal/store"
 )
 
 const (

@@ -15,20 +15,21 @@ import (
 	"syscall"
 	"time"
 
-	"hestia/internal/api"
-	"hestia/internal/auth"
-	"hestia/internal/desktop"
-	"hestia/internal/dnsname"
-	"hestia/internal/inventory"
-	"hestia/internal/jobs"
-	"hestia/internal/netscan"
-	"hestia/internal/onboard"
-	"hestia/internal/secrets"
-	"hestia/internal/selfinstall"
-	"hestia/internal/store"
-	"hestia/internal/update"
-	vers "hestia/internal/version"
-	"hestia/web"
+	"github.com/uxerror/hestia/internal/api"
+	"github.com/uxerror/hestia/internal/auth"
+	"github.com/uxerror/hestia/internal/desktop"
+	"github.com/uxerror/hestia/internal/dnsname"
+	"github.com/uxerror/hestia/internal/inventory"
+	"github.com/uxerror/hestia/internal/jobs"
+	"github.com/uxerror/hestia/internal/netscan"
+	"github.com/uxerror/hestia/internal/onboard"
+	"github.com/uxerror/hestia/internal/plugins"
+	"github.com/uxerror/hestia/internal/secrets"
+	"github.com/uxerror/hestia/internal/selfinstall"
+	"github.com/uxerror/hestia/internal/store"
+	"github.com/uxerror/hestia/internal/update"
+	vers "github.com/uxerror/hestia/internal/version"
+	"github.com/uxerror/hestia/web"
 )
 
 // version is set at build time with -ldflags "-X main.version=...".
@@ -64,7 +65,10 @@ func run(args []string) int {
 func usage() {
 	fmt.Fprint(os.Stderr, `Использование: hestia <команда>
 
-  serve    [--listen :8080] [--data ./data]       HTTP-сервер (API + веб-интерфейс)
+  serve    [--listen :8080] [--data ./data] [--plugin-dev <бинарник>]
+                                                  HTTP-сервер (API + веб-интерфейс);
+                                                  --plugin-dev запускает плагин дочерним
+                                                  процессом без песочницы (разработка)
   desktop  [--data ~/.local/share/hestia]         окно приложения
 
 Если в каталоге данных есть remote.json, Hestia уже перенесена на сервер: база не
@@ -85,6 +89,7 @@ type app struct {
 	net     *netscan.Manager
 	dns     *dnsname.Service
 	gate    *selfinstall.Gate
+	plugins *plugins.Manager
 	remote  *selfinstall.Remote // set when started in "moved" mode (no database)
 }
 
@@ -93,6 +98,7 @@ func (a *app) close() {
 		return
 	}
 	a.stopInv()
+	a.plugins.Close()
 	a.inv.Wait()
 	a.net.Wait()
 	a.dns.Wait()
@@ -101,7 +107,7 @@ func (a *app) close() {
 }
 
 // newApp builds the handler used by both serve and desktop.
-func newApp(ctx context.Context, dataDir, mode string) (*app, error) {
+func newApp(ctx context.Context, dataDir, mode, pluginDev string) (*app, error) {
 	// A moved controller never touches its (archived) database.
 	rem, err := selfinstall.ReadRemote(dataDir)
 	if err != nil {
@@ -172,25 +178,48 @@ func newApp(ctx context.Context, dataDir, mode string) (*app, error) {
 	up := (&update.Service{Store: st, Runner: runner, DataDir: dataDir, Version: version, Self: si}).Init()
 	up.CleanTemp()
 	up.StartChecks(invCtx)
+	pm := (&plugins.Manager{
+		Store: st, Secrets: sec, Runner: runner, Identity: id, Version: version, DataDir: dataDir, Mode: mode,
+		Inventory: inv, Netscan: nm,
+		Location: func(ctx context.Context) (*selfinstall.Location, error) {
+			state, err := si.State(ctx)
+			return state.Location, err
+		},
+		Open: func(ctx context.Context, loc selfinstall.Location) (plugins.Shell, error) {
+			return si.OpenShell(ctx, loc)
+		},
+	}).Init()
+	pm.Start()
+	if pluginDev != "" {
+		if err := pm.StartDev(pluginDev); err != nil {
+			pm.Close()
+			stopInv()
+			runner.Shutdown()
+			_ = st.Close()
+			return nil, fmt.Errorf("--plugin-dev: %w", err)
+		}
+		slog.Warn("dev-плагин запущен без песочницы", "path", pluginDev)
+	}
 	h := api.New(api.Config{
 		Store: st, Auth: auth.New(st), Runner: runner, Onboard: ob, Inventory: inv, Netscan: nm, DNS: dns, Identity: id,
-		Selfinstall: si, Gate: gate, Update: up, InstanceID: instanceID,
+		Selfinstall: si, Gate: gate, Update: up, Plugins: pm, InstanceID: instanceID,
 		Web: web.Dist(), Mode: mode, Version: version,
 	})
-	return &app{store: st, runner: runner, handler: h, stopInv: stopInv, inv: inv, net: nm, dns: dns, gate: gate}, nil
+	return &app{store: st, runner: runner, handler: h, stopInv: stopInv, inv: inv, net: nm, dns: dns, gate: gate, plugins: pm}, nil
 }
 
 func cmdServe(args []string) int {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	listen := fs.String("listen", ":8080", "адрес для прослушивания")
 	data := fs.String("data", "./data", "каталог данных")
+	pluginDev := fs.String("plugin-dev", "", "запустить плагин дочерним процессом без песочницы (разработка)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	a, err := newApp(ctx, *data, "serve")
+	a, err := newApp(ctx, *data, "serve", *pluginDev)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "ошибка:", err)
 		return 1
@@ -232,7 +261,7 @@ func cmdDesktop(args []string) int {
 	if !desktop.Available {
 		return desktop.Run(nil, "", "") // prints the stub message, exit code 2
 	}
-	a, err := newApp(context.Background(), *data, "desktop")
+	a, err := newApp(context.Background(), *data, "desktop", "")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "ошибка:", err)
 		return 1

@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"hestia/internal/sshx"
-	"hestia/internal/store"
-	"hestia/internal/target"
+	"github.com/uxerror/hestia/internal/sshx"
+	"github.com/uxerror/hestia/internal/store"
+	"github.com/uxerror/hestia/internal/target"
 )
 
 // pctShell runs scripts as root inside container vmid through `pct exec` on

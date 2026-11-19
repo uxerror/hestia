@@ -5,9 +5,9 @@ import (
 	"net/netip"
 	"strings"
 
-	"hestia/internal/inventory"
-	"hestia/internal/netscan/oui"
-	"hestia/internal/store"
+	"github.com/uxerror/hestia/internal/inventory"
+	"github.com/uxerror/hestia/internal/netscan/oui"
+	"github.com/uxerror/hestia/internal/store"
 )
 
 // linkIndex finds the Proxmox node or guest behind an address or MAC.

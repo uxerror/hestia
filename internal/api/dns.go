@@ -4,7 +4,7 @@ import (
 	"errors"
 	"net/http"
 
-	"hestia/internal/dnsname"
+	"github.com/uxerror/hestia/internal/dnsname"
 )
 
 // dnsError writes an error of the dnsname service; the body carries a code the

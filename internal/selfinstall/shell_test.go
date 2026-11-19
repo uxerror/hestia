@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"hestia/internal/selfinstall"
+	"github.com/uxerror/hestia/internal/selfinstall"
 )
 
 // roundTrip writes a file through the controller shell and runs a command.

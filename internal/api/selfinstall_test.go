@@ -11,14 +11,14 @@ import (
 	"testing/fstest"
 	"time"
 
-	"hestia/internal/api"
-	"hestia/internal/auth"
-	"hestia/internal/inventory"
-	"hestia/internal/jobs"
-	"hestia/internal/onboard"
-	"hestia/internal/secrets"
-	"hestia/internal/selfinstall"
-	"hestia/internal/store"
+	"github.com/uxerror/hestia/internal/api"
+	"github.com/uxerror/hestia/internal/auth"
+	"github.com/uxerror/hestia/internal/inventory"
+	"github.com/uxerror/hestia/internal/jobs"
+	"github.com/uxerror/hestia/internal/onboard"
+	"github.com/uxerror/hestia/internal/secrets"
+	"github.com/uxerror/hestia/internal/selfinstall"
+	"github.com/uxerror/hestia/internal/store"
 )
 
 var spa = fstest.MapFS{"index.html": {Data: []byte("<html>spa</html>")}}

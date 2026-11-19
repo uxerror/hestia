@@ -12,8 +12,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"hestia/internal/netscan/oui"
-	"hestia/internal/proxmox"
+	"github.com/uxerror/hestia/internal/netscan/oui"
+	"github.com/uxerror/hestia/internal/proxmox"
 )
 
 // API is the part of the Proxmox API client the collector uses.
