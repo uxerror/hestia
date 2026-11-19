@@ -27,12 +27,15 @@ test:
 #   make release VERSION=v0.1.0
 # It needs the release key (hestia-release keygen) and `gh auth login`; without
 # gh authentication it stops before publishing and leaves the files in dist/.
+# dist/plugins (plugin packages) lives next to the release files and is kept.
+RELEASE_ASSETS = dist/hestia-linux-amd64 dist/hestia-desktop-linux-amd64 dist/SHA256SUMS dist/SHA256SUMS.sig
+
 release:
 	@case "$(VERSION)" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "VERSION=vX.Y.Z обязателен"; exit 1;; esac
 	@test -z "$$(git status --porcelain)" || { echo "рабочее дерево не чистое"; exit 1; }
 	@test "$$(git rev-parse HEAD)" = "$$(git rev-parse '$(VERSION)^{commit}')" || { echo "HEAD не совпадает с тегом $(VERSION)"; exit 1; }
 	go vet ./... && go test -race -count=1 ./...
-	mkdir -p dist && $(RM) dist/*
+	mkdir -p dist && find dist -maxdepth 1 -type f -delete
 	$(MAKE) web server payload VERSION=$(VERSION)
 	cp build/bin/hestia dist/hestia-linux-amd64
 	$(MAKE) desktop VERSION=$(VERSION)
@@ -40,7 +43,7 @@ release:
 	go run ./cmd/hestia-release sign dist
 	go run ./cmd/hestia-release verify dist
 	@if gh auth status >/dev/null 2>&1; then \
-		gh release create $(VERSION) dist/* --verify-tag --notes-from-tag || gh release create $(VERSION) dist/* --verify-tag --generate-notes; \
+		gh release create $(VERSION) $(RELEASE_ASSETS) --verify-tag --notes-from-tag || gh release create $(VERSION) $(RELEASE_ASSETS) --verify-tag --generate-notes; \
 	else echo "gh не авторизован: релиз собран в dist/, публикация пропущена"; fi
 
 # ---- plugins ----
