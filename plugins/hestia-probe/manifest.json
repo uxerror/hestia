@@ -1,0 +1,22 @@
+{
+  "protocol": 1,
+  "id": "hestia-probe",
+  "name": "Hestia Probe",
+  "version": "v0.1.0",
+  "description": "Демонстрационная проверка HTTP-сервиса: следит за поставщиком http.service и показывает его ответ",
+  "homepage": "https://github.com/uxerror/hestia",
+  "author": {"name": "uxerror", "key": "v/i7jzbuZQGgOed7Q04PAQy3kj8U1gODTDdZdx2IXbo="},
+  "min_hestia": "v0.3.0",
+  "permissions": ["net.outbound"],
+  "provides": [],
+  "requires": [
+    {"name": "target", "type": "http.service", "label": "Что проверять", "optional": false, "multi": false}
+  ],
+  "multi_instance": true,
+  "schema": {
+    "fields": [
+      {"name": "interval_s", "type": "int", "label": "Интервал проверки, с", "default": 60, "min": 30, "max": 3600,
+       "help": "Как часто проверять сервис"}
+    ]
+  }
+}

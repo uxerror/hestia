@@ -1,7 +1,7 @@
 // Package deploytest is a fake deploy target for tests: an in-process SSH
 // server (sshxtest) that runs every command with the local /bin/sh, with
 // fake docker, apt-get, ss, systemctl and pct first in PATH. Absolute paths
-// the deploy code uses (/opt/hestia, /etc/os-release) are moved under a
+// the deploy code uses (/opt/hestia, /etc/os-release, /etc/hosts) are moved under a
 // temporary root. Nothing real is installed or started.
 package deploytest
 
@@ -21,8 +21,17 @@ import (
 	"github.com/uxerror/hestia/internal/sshx/sshxtest"
 )
 
-// Fake programs; $FAKE is the state directory.
+// Fake programs; $FAKE is the state directory, $ROOT stands for /.
 var bins = map[string]string{
+	"getent": `#!/bin/sh
+# Only "getent hosts <name>" from $ROOT/etc/hosts (never the real resolver).
+[ "$1" = hosts ] || exit 2
+[ -f "$ROOT/etc/hosts" ] || exit 2
+while read -r ip rest; do
+  for n in $rest; do [ "$n" = "#" ] && break; [ "$n" = "$2" ] && { echo "$ip       $2"; exit 0; }; done
+done < "$ROOT/etc/hosts"
+exit 2
+`,
 	"apt-get": `#!/bin/sh
 echo "apt-get $*" >> "$FAKE/apt.log"
 if [ -f "$FAKE/fail-apt" ]; then echo "E: fake apt failure" >&2; exit 100; fi
@@ -88,7 +97,7 @@ esac
 // fakes and links to these, never /usr/bin, so a real docker, apt-get or
 // pct on the test machine can never be reached.
 var tools = []string{"sh", "cat", "cp", "mv", "rm", "mkdir", "chmod", "wc", "sha256sum", "cut", "true", "false",
-	"printf", "echo", "sleep", "test", "ls"}
+	"printf", "echo", "sleep", "test", "ls", "grep", "mktemp"}
 
 // Target is the fake target.
 type Target struct {
@@ -132,6 +141,7 @@ func New(t testing.TB, key ssh.PublicKey) *Target {
 		t.Fatal(err)
 	}
 	tg.SetOS("debian", "", "Debian GNU/Linux 13 (trixie)")
+	tg.write(filepath.Join(tg.Root, "etc", "hosts"), "127.0.0.1 localhost\n")
 	tg.InstallDocker()
 	srv := sshxtest.New(t)
 	want := string(key.Marshal())
@@ -143,6 +153,7 @@ func New(t testing.TB, key ssh.PublicKey) *Target {
 
 func (tg *Target) rewrite(cmd string) string {
 	cmd = strings.ReplaceAll(cmd, "/opt/hestia", tg.Root+"/opt/hestia")
+	cmd = strings.ReplaceAll(cmd, "/etc/hosts", tg.Root+"/etc/hosts")
 	return strings.ReplaceAll(cmd, "/etc/os-release", tg.Root+"/etc/os-release")
 }
 
@@ -156,7 +167,7 @@ func (tg *Target) handle(user, cmd string, stdin []byte) (string, string, int) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	c := exec.CommandContext(ctx, "/bin/sh", "-c", tg.rewrite(cmd))
-	c.Env = []string{"PATH=" + tg.bin + ":" + tg.Dir + "/dockerbin:" + tg.tools, "FAKE=" + tg.Dir, "LC_ALL=C"}
+	c.Env = []string{"PATH=" + tg.bin + ":" + tg.Dir + "/dockerbin:" + tg.tools, "FAKE=" + tg.Dir, "ROOT=" + tg.Root, "LC_ALL=C"}
 	c.Dir = tg.Dir
 	c.Stdin = bytes.NewReader(stdin)
 	var out, errb bytes.Buffer

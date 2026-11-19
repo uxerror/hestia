@@ -49,15 +49,18 @@ type Plugin struct {
 // PluginInstance is a configuration of a plugin. Config never holds secret
 // values, only references.
 type PluginInstance struct {
-	ID        int64      `json:"id"`
-	PluginID  string     `json:"plugin_id"`
-	Name      string     `json:"name"`
-	Config    string     `json:"-"`
-	Status    string     `json:"status"`
-	Detail    string     `json:"detail"`
-	Endpoints string     `json:"-"`
-	CheckedAt *time.Time `json:"checked_at"`
-	CreatedAt time.Time  `json:"created_at"`
+	ID        int64  `json:"id"`
+	PluginID  string `json:"plugin_id"`
+	Name      string `json:"name"`
+	Config    string `json:"-"`
+	Status    string `json:"status"`
+	Detail    string `json:"detail"`
+	Endpoints string `json:"-"`
+	// Containers is the last known list of the instance's containers
+	// (JSON, recorded from deploy.* answers).
+	Containers string     `json:"-"`
+	CheckedAt  *time.Time `json:"checked_at"`
+	CreatedAt  time.Time  `json:"created_at"`
 }
 
 // PluginGrant gives an instance access to a target.
@@ -221,6 +224,10 @@ func (s *Store) DeletePlugin(ctx context.Context, id string) error {
 	if n > 0 {
 		return ErrDuplicate
 	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM plugin_links WHERE status = ? AND (provider_instance IN (SELECT id FROM plugin_instances WHERE plugin_id = ?)
+		OR consumer_instance IN (SELECT id FROM plugin_instances WHERE plugin_id = ?))`, LinkDraft, id, id); err != nil {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM plugin_instances WHERE plugin_id = ?`, id); err != nil {
 		return err
 	}
@@ -230,13 +237,13 @@ func (s *Store) DeletePlugin(ctx context.Context, id string) error {
 	return tx.Commit()
 }
 
-const instanceCols = `id, plugin_id, name, config, status, detail, endpoints, checked_at, created_at`
+const instanceCols = `id, plugin_id, name, config, status, detail, endpoints, containers, checked_at, created_at`
 
 func scanInstance(sc interface{ Scan(...any) error }) (PluginInstance, error) {
 	var in PluginInstance
 	var checked sql.NullInt64
 	var created int64
-	err := sc.Scan(&in.ID, &in.PluginID, &in.Name, &in.Config, &in.Status, &in.Detail, &in.Endpoints, &checked, &created)
+	err := sc.Scan(&in.ID, &in.PluginID, &in.Name, &in.Config, &in.Status, &in.Detail, &in.Endpoints, &in.Containers, &checked, &created)
 	if errors.Is(err, sql.ErrNoRows) {
 		return in, ErrNotFound
 	}
@@ -278,8 +285,10 @@ func (s *Store) CreateInstance(ctx context.Context, in *PluginInstance, grants [
 	return tx.Commit()
 }
 
+// replaceGrants replaces the instance's own grants (grants through links
+// stay).
 func replaceGrants(ctx context.Context, tx *sql.Tx, id int64, grants []PluginGrant) error {
-	if _, err := tx.ExecContext(ctx, `DELETE FROM plugin_grants WHERE instance_id = ?`, id); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM plugin_grants WHERE instance_id = ? AND via_link IS NULL`, id); err != nil {
 		return err
 	}
 	for _, g := range grants {
@@ -343,23 +352,60 @@ func (s *Store) ListInstances(ctx context.Context, pluginID string, withDrafts b
 	return out, rows.Err()
 }
 
-// DeleteInstance removes an instance (grants go with it).
+// DeleteInstance removes an instance (grants and draft links go with it).
+// It fails while real links of the instance exist (they are removed first).
 func (s *Store) DeleteInstance(ctx context.Context, id int64) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM plugin_instances WHERE id = ?`, id)
-	return err
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM plugin_links WHERE status = ? AND (provider_instance = ? OR consumer_instance = ?)`,
+		LinkDraft, id, id); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM plugin_instances WHERE id = ?`, id); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // DeleteDrafts removes draft instances (all of them when pluginID is "",
-// otherwise those of the plugin with the given name).
+// otherwise those of the plugin with the given name) and draft links.
 func (s *Store) DeleteDrafts(ctx context.Context, pluginID, name string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM plugin_instances WHERE status = ? AND (? = '' OR (plugin_id = ? AND name = ?))`,
-		InstanceDraft, pluginID, pluginID, name)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	cond := `status = ? AND (? = '' OR (plugin_id = ? AND name = ?))`
+	args := []any{InstanceDraft, pluginID, pluginID, name}
+	sel := `SELECT id FROM plugin_instances WHERE ` + cond
+	if _, err := tx.ExecContext(ctx, `DELETE FROM plugin_links WHERE status = ? AND (provider_instance IN (`+sel+`) OR consumer_instance IN (`+sel+`))`,
+		append(append([]any{LinkDraft}, args...), args...)...); err != nil {
+		return err
+	}
+	if pluginID == "" {
+		// Draft links of real instances (a plan of a link) go too.
+		if _, err := tx.ExecContext(ctx, `DELETE FROM plugin_links WHERE status = ?`, LinkDraft); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM plugin_instances WHERE `+cond, args...); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// SetInstanceContainers records the last known containers of an instance.
+func (s *Store) SetInstanceContainers(ctx context.Context, id int64, containers string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE plugin_instances SET containers = ? WHERE id = ?`, containers, id)
 	return err
 }
 
-// Grants returns the grants of an instance.
+// Grants returns the instance's own grants (not those through links).
 func (s *Store) Grants(ctx context.Context, instanceID int64) ([]PluginGrant, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT target_kind, target_ref FROM plugin_grants WHERE instance_id = ? ORDER BY target_ref`, instanceID)
+	rows, err := s.db.QueryContext(ctx, `SELECT target_kind, target_ref FROM plugin_grants WHERE instance_id = ? AND via_link IS NULL ORDER BY target_ref`, instanceID)
 	if err != nil {
 		return nil, err
 	}
@@ -375,10 +421,21 @@ func (s *Store) Grants(ctx context.Context, instanceID int64) ([]PluginGrant, er
 	return out, rows.Err()
 }
 
-// HasGrant reports whether the instance may use the target.
+// HasGrant reports whether the target is granted to the instance directly
+// (grants through links count only within calls of their link, see
+// HasLinkGrant).
 func (s *Store) HasGrant(ctx context.Context, instanceID int64, ref string) (bool, error) {
 	var n int
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM plugin_grants WHERE instance_id = ? AND target_ref = ?`, instanceID, ref).Scan(&n)
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM plugin_grants WHERE instance_id = ? AND target_ref = ? AND via_link IS NULL`, instanceID, ref).Scan(&n)
+	return n > 0, err
+}
+
+// HasLinkGrant reports whether the target is granted to the instance
+// through the given link.
+func (s *Store) HasLinkGrant(ctx context.Context, instanceID int64, ref string, link int64) (bool, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM plugin_grants WHERE instance_id = ? AND target_ref = ? AND via_link = ?`,
+		instanceID, ref, link).Scan(&n)
 	return n > 0, err
 }
 

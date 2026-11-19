@@ -54,7 +54,12 @@ Hestia сверяет токен (хранит только его sha256, ср�
 - Любой другой запрос до `hello` → ошибка `-32002`. Без `hello` за 20 с соединение закрывается.
 - Повторное подключение того же плагина вытесняет старое соединение.
 - В режиме разработки Hestia после `hello` спрашивает `manifest` и берёт права из него (подпись не
-  проверяется — плагин помечен «dev, без песочницы»).
+  проверяется — плагин помечен «dev, без песочницы»). Флаг `--plugin-dev` можно повторять: каждый
+  бинарник — отдельный плагин.
+- `links` (необязательно) — активные связи экземпляров плагина:
+  `[{link, kind, role, instance, port, peer?, device?, binding?}]` (`binding` — только у роли
+  `consumer`, секреты в нём — ссылками). Потребитель может восстановить свои подключения без своего
+  состояния.
 
 ## Методы плагина (Hestia → плагин)
 
@@ -65,6 +70,11 @@ Hestia сверяет токен (хранит только его sha256, ср�
 | `instance.plan` | `{instance, config, action}` | `{actions: [{title, detail, risk}], warnings: [...], data}` |
 | `instance.apply` | `{job_id, instance, config, action, plan}` | `{}` или ошибка |
 | `instance.status` | `{instance}` | `{state, detail, endpoints: [{name, url}]}` |
+| `link.plan` | `{link, kind, role, action, instance, port, type, peer?, device?, config}` | план своей стороны связи |
+| `link.apply` | то же + `job_id`, `plan`, `binding?` | `{binding}` (поставщик) или `{}` |
+| `link.remove` | то же + `job_id`, `plan` | `{}` |
+| `link.status` | `{link, kind, role, instance, port, type, peer?, device?, config, binding?}` | `{state, detail}` |
+| `link.refresh` | `{link, kind, role, instance, port, type, …}` | `{binding}` (поставщик) |
 
 - `instance` — `{id, name, config}` (текущее состояние экземпляра). У создаваемого экземпляра `id`
   уже есть: Hestia заводит черновик до первого плана.
@@ -79,6 +89,11 @@ Hestia сверяет токен (хранит только его sha256, ср�
 - `state` — `ok` / `degraded` / `down` / `unknown`. `endpoints` — только ссылки `http(s)://`,
   остальные Hestia отбрасывает. Статус спрашивается при открытии страницы плагина и раз в 5 минут.
 - Ошибка метода — обычная ошибка JSON-RPC; её `message` увидит пользователь (по-русски, коротко).
+- В `instance.plan`/`instance.apply` составного плана (см. «Связи») приходит `links: [{port, peer}]` —
+  поставщики, которые подключат к новому экземпляру сразу после создания (данные — позже, в
+  `link.apply`).
+- `link.*` необязательны: плагин без них отвечает `-32601`, и его порты нельзя связать («плагин не
+  поддерживает связи»). В Go — интерфейс `sdk.Linker`.
 
 ### Конфигурация
 
@@ -102,7 +117,7 @@ Hestia сверяет токен (хранит только его sha256, ср�
 | `job.step_done` | — | `{job_id, error?}` — закрыть текущий шаг (с `error` — ошибкой) |
 | `job.log` | — | `{job_id, level: info/warn/error, line}` — строка журнала; известные секреты экземпляра заменяются на `***` |
 | `secret.put` | — | `{instance, name, value}` — сохранить секрет (шифруется, ≤ 64 КБ) |
-| `secret.get` | — | `{instance, name}` → `{value, exists}` |
+| `secret.get` | — | `{instance, name}` → `{value, exists}`; `name` вида `link:<id>:<поле>` — секрет связи (см. «Связи») |
 | `secret.delete` | — | `{instance, name}` |
 | `target.list` | `targets.read` | `{instance}` → `[{id, kind, name, address, os, root, sudo, docker_capable}]` — цели, выданные экземпляру |
 | `target.exec` | `targets.exec` | `{instance, target, cmd, stdin?, timeout_s?}` → `{code, stdout, stderr}` |
@@ -149,6 +164,7 @@ Hestia сверяет токен (хранит только его sha256, ср�
 | `deploy.docker` | `deploy.*` | «Разворачивать Docker-контейнеры» |
 | `inventory.read` | `inventory.get` | «Читать карту сети» |
 | `net.outbound` | сетевые сокеты в песочнице | «Сетевые подключения напрямую» |
+| `links.client` | связи «сервис → устройство»: работа на устройстве пользователя во время `link.*` этой связи (вместе с `targets.exec`) | «Настраивать подключение на выбранных устройствах» |
 
 Без `net.outbound` песочница разрешает только unix-сокеты: всё общение с целями — через Hestia.
 
@@ -240,6 +256,85 @@ Hestia разворачивает compose-проект плагина на вы�
 **`deploy.status`** — `{project, docker, exists, containers: [{name, service, state, status, health,
 exit_code, ports: [{url, target_port, published_port, protocol}]}]}` (по `docker compose ps -a`).
 
+## Связи
+
+Связь соединяет порт `provides` одного экземпляра с портом `requires` другого (**service**) или порт
+`provides` с устройством пользователя (**device**: поставщик сам настраивает клиентскую сторону —
+запись в hosts, монтирование, доверие к CA). Типы портов и данные (`binding`) — в
+[`types.md`](types.md).
+
+### Порты в манифесте
+
+```json
+"provides": [{"name": "web", "type": "http.service", "label": "Веб-страница", "client": true, "multi": true,
+              "link_schema": {"fields": [{"name": "hostname", "type": "string", "label": "Имя", "default": "hello.home"}]}}],
+"requires": [{"name": "target", "type": "http.service", "label": "Что проверять", "optional": false, "multi": false}]
+```
+
+- `name` — `^[a-z][a-z0-9_]{0,31}$`, уникален в своём списке; без `name` (манифесты 02h) — `type` с
+  заменой `.`/`-` на `_`.
+- `type` — официальный тип из `types.md` или свой `<id плагина>.<имя>`. Неизвестный официальный тип
+  или чужой префикс — пакет отклоняется. Совместимость — точное совпадение `type`.
+- `provides.multi` (по умолчанию `true`) — много потребителей; `requires.multi` (по умолчанию
+  `false`) — несколько поставщиков; `requires.optional` (по умолчанию `false`).
+- `provides.client` — поставщик умеет связь с устройством; требует права `links.client`.
+- `provides.link_schema` — форма связи (как `schema.fields`, без `target`, `secret` и пресетов);
+  значения приходят в `config` вызовов `link.*`.
+
+### Жизненный цикл
+
+Создание и удаление — план → подтверждение → задача `plugin-link` (как у экземпляров: хеш, 15 мин,
+перепроверка планов обеих сторон перед применением). В `link.*` приходят: `link` — id связи,
+`kind` (`service`/`device`), `role` (`provider`/`consumer`/`client`), `instance` — свой экземпляр,
+`port`, `type`, `peer` — другая сторона (`{plugin, instance, name, port}` — единственное, что плагин
+узнаёт о чужих экземплярах), `device` — устройство (`{id, kind, name, address, …}` как в
+`target.list`), `action` (`create`/`remove`; при повторном применении после refresh — `update`).
+
+**service:**
+
+1. `link.plan` у поставщика (`role: provider`) и у потребителя (`role: consumer`) — действия обеих
+   сторон в одном плане.
+2. `link.apply` у поставщика → `{binding}`. Hestia проверяет binding по типу (ошибка — связь не
+   создаётся), значения полей-секретов кладёт в секреты связи `link:<id>:<поле>`, а в binding ставит
+   ссылки `{"secret": "link:<id>:<поле>"}`. Затем `link.apply` у потребителя с этим binding. Ошибка
+   потребителя → `link.remove` у поставщика (откат), запись удаляется.
+3. Удаление: `link.remove` у потребителя, затем у поставщика, секреты связи удаляются. Если сторона
+   ответила ошибкой — связь `orphaned` (видна, можно удалить только запись).
+
+**device:**
+
+1. `link.plan` у поставщика с `role: client`, `device`, `config`.
+2. `link.apply` — поставщик работает на устройстве через `target.exec`/`target.put_file`. Может
+   вернуть binding (тот же тип порта) — Hestia сохранит его и по нему заметит изменения.
+3. `link.remove` у поставщика, затем доступ к устройству снимается.
+
+**Статус:** `link.status` у сторон связи при открытии карты (не чаще раза в минуту) и раз в 5 минут;
+итог — худший из `ok/degraded/down/unknown`.
+
+**Изменение экземпляра-поставщика:** после успешного `instance.apply` (`update`) Hestia вызывает
+`link.refresh` по каждой его связи; если binding изменился — `link.apply` (`action: update`) у
+потребителя или (device) у поставщика на устройстве. Ошибка не отменяет изменение экземпляра, связь
+помечается `degraded`. **Удаление экземпляра** со связями — один план: сначала связи, потом экземпляр.
+
+### Составной план
+
+`POST /api/v1/plugins/compose/plan` — новый экземпляр с зависимостями: для каждого `requires` —
+существующий поставщик или новый экземпляр (вложенно, глубина ≤ 3, тот же плагин в цепочке —
+ошибка). Шаги: новые поставщики (сначала самые глубокие) → экземпляр → связи; общий хеш; задача
+`plugin-compose`; при ошибке уже выполненные шаги откатываются в обратном порядке (`link.remove`,
+удаление экземпляра через `instance.plan`/`instance.apply` с `action: remove`).
+
+### Доступ
+
+- Устройство связи `device` — грант экземпляра-поставщика с пометкой `via_link`: `target.exec`,
+  `target.put_file`, `deploy.*` к нему проходят **только во время вызова `link.*` этой связи** и
+  пока связь существует (плюс права `targets.exec`/`deploy.docker`). В `target.list` оно не
+  попадает, своей целью экземпляра не становится.
+- `secret.get` секрета `link:<id>:<поле>` — только экземпляру-потребителю этой связи и только пока
+  связь активна. `secret.put`/`secret.delete` для `link:*` запрещены всем: поставщик передаёт
+  секреты только в binding (`link.apply`/`link.refresh`).
+- Значения секретов связи маскируются в журнале задачи и не попадают в БД открытым текстом и в API.
+
 ## Манифест и пакет
 
 `manifest.json` вшивается в бинарник (`//go:embed`) и кладётся в пакет. Поля — см.
@@ -301,8 +396,10 @@ go run ./cmd/hestia-release plugin-verify dist/plugins/my-plugin-v0.1.0-linux-am
 Юнит `hestia-plugin@<id>.service`: `DynamicUser=yes`, `ProtectSystem=strict`, `ProtectHome=yes`,
 `PrivateTmp`, `PrivateDevices`, `NoNewPrivileges`, пустой `CapabilityBoundingSet`, нет доступа к
 `/var/lib/hestia` и `/etc/hestia`, `MemoryMax=256M`, `TasksMax=64`. Своё состояние плагин держит в
-`$STATE_DIRECTORY` (`/var/lib/hestia-plugin/<id>`), оно удаляется вместе с плагином. Сетевые
-сокеты — только с правом `net.outbound`.
+`$STATE_DIRECTORY` (`/var/lib/hestia-plugin/<id>`), оно удаляется вместе с плагином; файлы
+создаются с `UMask=0077`. Сетевые сокеты — только с правом `net.outbound`. Шаблон юнита и
+drop-in'ы Hestia обновляет при установке или обновлении любого плагина, если их содержимое
+отличается от текущей версии (с `systemctl daemon-reload`).
 
 ## Пример сессии
 

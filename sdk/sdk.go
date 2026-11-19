@@ -35,6 +35,26 @@ type Plugin interface {
 	Status(ctx context.Context, inst Instance) (Status, error)
 }
 
+// Linker is implemented by plugins whose ports can be linked (see
+// docs/plugins/protocol.md, "Связи"). A plugin without it answers -32601 to
+// link.* and Hestia shows its ports as not linkable.
+type Linker interface {
+	// LinkPlan describes what this side would do (req.Action: create or
+	// remove) without changing anything; it must be deterministic.
+	LinkPlan(ctx context.Context, req LinkRequest) (Plan, error)
+	// LinkApply sets up this side: a provider returns the binding (its
+	// secret fields as plain values — Hestia stores them as secrets of the
+	// link), a consumer or client returns nil.
+	LinkApply(ctx context.Context, req LinkRequest, job *Job) (json.RawMessage, error)
+	// LinkRemove removes this side.
+	LinkRemove(ctx context.Context, req LinkRequest, job *Job) error
+	// LinkStatus checks this side.
+	LinkStatus(ctx context.Context, req LinkRequest) (LinkStatus, error)
+	// LinkRefresh returns the provider's current binding (called after the
+	// provider instance was changed).
+	LinkRefresh(ctx context.Context, req LinkRequest) (json.RawMessage, error)
+}
+
 // Environment of a plugin process.
 const (
 	// EnvSocket is the unix socket of Hestia (production, systemd unit).
@@ -128,7 +148,7 @@ func Run(ctx context.Context, manifest []byte, p Plugin, rwc io.ReadWriteCloser,
 	if err != nil {
 		return err
 	}
-	srv := &server{manifest: json.RawMessage(manifest), p: p}
+	srv := &server{manifest: json.RawMessage(manifest), p: p, ready: make(chan struct{})}
 	conn := rpc.New(rwc, srv.handle, rpc.Options{})
 	defer conn.Close()
 	srv.host = &Host{conn: conn}
@@ -142,6 +162,7 @@ func Run(ctx context.Context, manifest []byte, p Plugin, rwc io.ReadWriteCloser,
 		return fmt.Errorf("рукопожатие: %w", err)
 	}
 	srv.host.setWelcome(w)
+	close(srv.ready)
 
 	select {
 	case <-ctx.Done():
@@ -158,10 +179,21 @@ type server struct {
 	manifest json.RawMessage
 	p        Plugin
 	host     *Host
+	// ready is closed once the welcome is stored: Hestia may call the
+	// plugin before the answer to hello has been processed here.
+	ready chan struct{}
 }
 
 func (s *server) handle(ctx context.Context, method string, params json.RawMessage) (any, error) {
 	ctx = context.WithValue(ctx, hostKey{}, s.host)
+	if method != MethodManifest {
+		wctx, cancel := context.WithTimeout(ctx, HelloTimeout)
+		select {
+		case <-s.ready:
+		case <-wctx.Done():
+		}
+		cancel()
+	}
 	switch method {
 	case MethodManifest:
 		return s.manifest, nil
@@ -220,8 +252,65 @@ func (s *server) handle(ctx context.Context, method string, params json.RawMessa
 			st.Endpoints = []Endpoint{}
 		}
 		return st, nil
+	case MethodLinkPlan, MethodLinkApply, MethodLinkRemove, MethodLinkStatus, MethodLinkRefresh:
+		l, ok := s.p.(Linker)
+		if !ok {
+			return nil, rpc.Errorf(rpc.CodeMethodNotFound, "плагин не поддерживает связи")
+		}
+		var req LinkRequest
+		if err := decode(params, &req); err != nil {
+			return nil, err
+		}
+		return s.link(ctx, l, method, req)
 	}
 	return nil, rpc.Errorf(rpc.CodeMethodNotFound, "метод %s не поддерживается", method)
+}
+
+func (s *server) link(ctx context.Context, l Linker, method string, req LinkRequest) (any, error) {
+	if req.Config == nil {
+		req.Config = Config{}
+	}
+	switch method {
+	case MethodLinkPlan:
+		pl, err := l.LinkPlan(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		if pl.Actions == nil {
+			pl.Actions = []Action{}
+		}
+		if pl.Warnings == nil {
+			pl.Warnings = []string{}
+		}
+		return pl, nil
+	case MethodLinkApply, MethodLinkRemove:
+		job := &Job{ID: req.JobID, host: s.host, ctx: ctx}
+		var (
+			b   json.RawMessage
+			err error
+		)
+		if method == MethodLinkApply {
+			b, err = l.LinkApply(ctx, req, job)
+		} else {
+			err = l.LinkRemove(ctx, req, job)
+		}
+		job.closeOpen(err)
+		if err != nil {
+			return nil, err
+		}
+		return LinkResult{Binding: b}, nil
+	case MethodLinkStatus:
+		st, err := l.LinkStatus(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		return st, nil
+	}
+	b, err := l.LinkRefresh(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return LinkResult{Binding: b}, nil
 }
 
 func decode(params json.RawMessage, v any) error {

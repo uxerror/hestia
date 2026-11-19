@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -68,7 +69,8 @@ func usage() {
   serve    [--listen :8080] [--data ./data] [--plugin-dev <бинарник>]
                                                   HTTP-сервер (API + веб-интерфейс);
                                                   --plugin-dev запускает плагин дочерним
-                                                  процессом без песочницы (разработка)
+                                                  процессом без песочницы (разработка;
+                                                  флаг можно повторять)
   desktop  [--data ~/.local/share/hestia]         окно приложения
 
 Если в каталоге данных есть remote.json, Hestia уже перенесена на сервер: база не
@@ -106,8 +108,21 @@ func (a *app) close() {
 	_ = a.store.Close()
 }
 
+// stringList is a repeatable string flag.
+type stringList []string
+
+func (l *stringList) String() string { return strings.Join(*l, ",") }
+
+func (l *stringList) Set(v string) error {
+	if v == "" {
+		return errors.New("пустой путь")
+	}
+	*l = append(*l, v)
+	return nil
+}
+
 // newApp builds the handler used by both serve and desktop.
-func newApp(ctx context.Context, dataDir, mode, pluginDev, githubAPI string) (*app, error) {
+func newApp(ctx context.Context, dataDir, mode string, pluginDev []string, githubAPI string) (*app, error) {
 	// A moved controller never touches its (archived) database.
 	rem, err := selfinstall.ReadRemote(dataDir)
 	if err != nil {
@@ -191,15 +206,15 @@ func newApp(ctx context.Context, dataDir, mode, pluginDev, githubAPI string) (*a
 		},
 	}).Init()
 	pm.Start()
-	if pluginDev != "" {
-		if err := pm.StartDev(pluginDev); err != nil {
+	for _, p := range pluginDev {
+		if err := pm.StartDev(p); err != nil {
 			pm.Close()
 			stopInv()
 			runner.Shutdown()
 			_ = st.Close()
-			return nil, fmt.Errorf("--plugin-dev: %w", err)
+			return nil, fmt.Errorf("--plugin-dev %s: %w", p, err)
 		}
-		slog.Warn("dev-плагин запущен без песочницы", "path", pluginDev)
+		slog.Warn("dev-плагин запущен без песочницы", "path", p)
 	}
 	h := api.New(api.Config{
 		Store: st, Auth: auth.New(st), Runner: runner, Onboard: ob, Inventory: inv, Netscan: nm, DNS: dns, Identity: id,
@@ -213,7 +228,8 @@ func cmdServe(args []string) int {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	listen := fs.String("listen", ":8080", "адрес для прослушивания")
 	data := fs.String("data", "./data", "каталог данных")
-	pluginDev := fs.String("plugin-dev", "", "запустить плагин дочерним процессом без песочницы (разработка)")
+	var pluginDev stringList
+	fs.Var(&pluginDev, "plugin-dev", "запустить плагин дочерним процессом без песочницы (разработка; можно повторять)")
 	githubAPI := fs.String("github-api", update.DefaultAPI, "адрес API GitHub для обновлений и каталога плагинов (для тестов)")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -221,7 +237,7 @@ func cmdServe(args []string) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	a, err := newApp(ctx, *data, "serve", *pluginDev, *githubAPI)
+	a, err := newApp(ctx, *data, "serve", pluginDev, *githubAPI)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "ошибка:", err)
 		return 1
@@ -263,7 +279,7 @@ func cmdDesktop(args []string) int {
 	if !desktop.Available {
 		return desktop.Run(nil, "", "") // prints the stub message, exit code 2
 	}
-	a, err := newApp(context.Background(), *data, "desktop", "", update.DefaultAPI)
+	a, err := newApp(context.Background(), *data, "desktop", nil, update.DefaultAPI)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "ошибка:", err)
 		return 1

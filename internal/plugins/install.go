@@ -192,6 +192,7 @@ func (m *Manager) purgeLocked() {
 			}
 		}
 	}
+	m.purgeCompositesLocked()
 }
 
 // preview checks the package against what is installed: the pinned author
@@ -232,7 +233,7 @@ func (m *Manager) preview(ctx context.Context, pkg *Package) (*Preview, error) {
 	case c == 0:
 		return nil, newErr(http.StatusConflict, "Версия %s уже установлена.", cur.Version)
 	}
-	old, _ := ParseManifest([]byte(cur.Manifest))
+	old, _ := storedManifest(cur.Manifest)
 	diff := &UpdateDiff{From: cur.Version, To: man.Version, NewPermissions: []string{}}
 	for _, p := range man.Permissions {
 		if !slices.Contains(old.Permissions, p) {
@@ -456,7 +457,25 @@ func (in *installer) place(ctx context.Context) error {
 	if err := in.sh.PutFile(ctx, nil, l.p(tok), []byte(in.token), "0600", "root:root"); err != nil {
 		return errors.New("запись токена не удалась")
 	}
-	if err := in.sd.prepare(ctx, in.log); err != nil {
+	changed, err := in.sd.prepare(ctx, in.log)
+	if err != nil {
+		return err
+	}
+	if changed {
+		in.run_.Log("info", "Шаблон юнита плагинов обновлён")
+	}
+	// The drop-ins of the other plugins follow this version of Hestia too.
+	others := map[string]bool{}
+	if ps, err := m.Store.ListPlugins(ctx); err == nil {
+		for _, p := range ps {
+			if p.ID == man.ID || p.Source == store.PluginSourceDev {
+				continue
+			}
+			pm, _ := storedManifest(p.Manifest)
+			others[p.ID] = slices.Contains(pm.Permissions, sdk.PermNetOutbound)
+		}
+	}
+	if _, err := in.sd.refreshSandboxes(ctx, in.log, others); err != nil {
 		return err
 	}
 	if err := in.sd.sandbox(ctx, in.log, man.ID, slices.Contains(man.Permissions, sdk.PermNetOutbound)); err != nil {
@@ -600,7 +619,7 @@ func (in *installer) rollback(ctx context.Context) {
 	if in.prev.Version != man.Version {
 		steps = append(steps, "rm -rf "+l.q(l.versionDir(man.ID, man.Version)))
 	}
-	prevMan, _ := ParseManifest([]byte(in.prev.Manifest))
+	prevMan, _ := storedManifest(in.prev.Manifest)
 	if err := in.sd.sandbox(ctx, in.log, man.ID, slices.Contains(prevMan.Permissions, sdk.PermNetOutbound)); err != nil {
 		in.run_.Log("error", "откат: "+err.Error())
 	}

@@ -16,19 +16,24 @@ import (
 
 	"github.com/uxerror/hestia/internal/version"
 	"github.com/uxerror/hestia/sdk"
+	"github.com/uxerror/hestia/sdk/types"
 )
 
 var (
 	reID        = regexp.MustCompile(`^[a-z][a-z0-9-]{1,39}$`)
 	rePortType  = regexp.MustCompile(`^[a-z][a-z0-9.-]+$`)
 	reFieldName = regexp.MustCompile(`^[a-z][a-z0-9_]{0,39}$`)
+	rePortName  = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
 )
 
 // Permissions is the closed list of protocol v1.
-var Permissions = []string{sdk.PermTargetsRead, sdk.PermTargetsExec, sdk.PermDeployDocker, sdk.PermInventoryRead, sdk.PermNetOutbound}
+var Permissions = []string{sdk.PermTargetsRead, sdk.PermTargetsExec, sdk.PermDeployDocker, sdk.PermInventoryRead,
+	sdk.PermNetOutbound, sdk.PermLinksClient}
 
-// reservedIDs collide with API paths under /api/v1/plugins/.
-var reservedIDs = []string{"authors", "catalog", "install", "instances", "packages", "plans", "targets"}
+// reservedIDs collide with API paths under /api/v1/plugins/ or with the
+// prefixes of official link types.
+var reservedIDs = append([]string{"authors", "catalog", "compose", "install", "instances", "links", "packages", "plans", "targets"},
+	types.Prefixes()...)
 
 var fieldTypes = []string{sdk.FieldString, sdk.FieldText, sdk.FieldInt, sdk.FieldBool, sdk.FieldEnum, sdk.FieldSecret, sdk.FieldTarget}
 
@@ -45,6 +50,29 @@ func ParseManifest(b []byte) (sdk.Manifest, error) {
 		return m, err
 	}
 	return m, nil
+}
+
+// storedManifest decodes the manifest of an installed plugin. It was
+// validated when installed; the rules may have become stricter since (link
+// types), so it is not validated again — ports are only normalised.
+func storedManifest(raw string) (sdk.Manifest, error) {
+	var m sdk.Manifest
+	dec := json.NewDecoder(strings.NewReader(raw))
+	dec.UseNumber()
+	if err := dec.Decode(&m); err != nil {
+		return m, pkgErr("manifest.json не разбирается: %v", err)
+	}
+	return m, nil
+}
+
+// findPort returns a port of the manifest by name.
+func findPort(list []sdk.Port, name string) (sdk.Port, bool) {
+	for _, p := range list {
+		if p.PortName() == name {
+			return p, true
+		}
+	}
+	return sdk.Port{}, false
 }
 
 // ValidateManifest checks the semantics of a manifest.
@@ -87,17 +115,84 @@ func ValidateManifest(m sdk.Manifest) error {
 		}
 		seen[p] = true
 	}
-	for _, list := range [][]sdk.Port{m.Provides, m.Requires} {
-		for _, p := range list {
-			if !rePortType.MatchString(p.Type) || len(p.Type) > 64 || len(p.Name) > 64 {
-				return pkgErr("неверный тип связи %q в provides/requires", p.Type)
-			}
-		}
+	if err := validatePorts(m, true); err != nil {
+		return err
 	}
-	return validateSchema(m.Schema)
+	if err := validatePorts(m, false); err != nil {
+		return err
+	}
+	return validateSchema(m.Schema, false)
 }
 
-func validateSchema(s sdk.Schema) error {
+// validatePorts checks provides (or requires): names, types (official or
+// prefixed by the plugin id), the attributes allowed on each side and the
+// links.client permission.
+func validatePorts(m sdk.Manifest, provides bool) error {
+	list, side := m.Requires, "requires"
+	if provides {
+		list, side = m.Provides, "provides"
+	}
+	if len(list) > 32 {
+		return pkgErr("в %s больше 32 портов", side)
+	}
+	names := map[string]bool{}
+	for _, p := range list {
+		if !rePortType.MatchString(p.Type) || len(p.Type) > 64 || strings.HasSuffix(p.Type, ".") || strings.Contains(p.Type, "..") {
+			return pkgErr("неверный тип связи %q в %s", p.Type, side)
+		}
+		if !types.IsOfficial(p.Type) {
+			prefix, rest, dotted := strings.Cut(p.Type, ".")
+			switch {
+			case !dotted || rest == "":
+				return pkgErr("тип связи %q в %s: неизвестный официальный тип (свои типы — с префиксом %q)", p.Type, side, m.ID+".")
+			case prefix != m.ID:
+				return pkgErr("тип связи %q в %s: неизвестный официальный тип или префикс другого плагина (свои типы — %q)", p.Type, side, m.ID+".<имя>")
+			}
+		}
+		name := p.PortName()
+		if !rePortName.MatchString(name) {
+			if p.Name == "" {
+				return pkgErr("порт %s в %s: укажите name (строчные буквы, цифры и _, до 32 символов)", p.Type, side)
+			}
+			return pkgErr("неверное имя порта %q в %s: строчные латинские буквы, цифры и _, до 32 символов", p.Name, side)
+		}
+		if names[name] {
+			return pkgErr("порт %q в %s указан дважды", name, side)
+		}
+		names[name] = true
+		if len(p.Label) > 100 || strings.ContainsAny(p.Label, "\n\r") {
+			return pkgErr("порт %s: label — одна строка до 100 символов", name)
+		}
+		if provides {
+			if p.Optional {
+				return pkgErr("порт %s: optional допустим только в requires", name)
+			}
+			if p.Client && !slices.Contains(m.Permissions, sdk.PermLinksClient) {
+				return pkgErr("порт %s: client требует права %s", name, sdk.PermLinksClient)
+			}
+			if p.LinkSchema != nil {
+				if err := validateSchema(*p.LinkSchema, true); err != nil {
+					return pkgErr("порт %s, link_schema: %v", name, err)
+				}
+			}
+			continue
+		}
+		if p.Client {
+			return pkgErr("порт %s: client допустим только в provides", name)
+		}
+		if p.LinkSchema != nil {
+			return pkgErr("порт %s: link_schema допустима только в provides", name)
+		}
+	}
+	return nil
+}
+
+// validateSchema checks a form; link is set for the link_schema of a port
+// (no target and secret fields, no presets).
+func validateSchema(s sdk.Schema, link bool) error {
+	if link && len(s.Presets) > 0 {
+		return pkgErr("у формы связи не бывает пресетов")
+	}
 	if len(s.Fields) > 64 {
 		return pkgErr("в форме больше 64 полей")
 	}
@@ -112,6 +207,9 @@ func validateSchema(s sdk.Schema) error {
 		names[f.Name] = f
 		if !slices.Contains(fieldTypes, f.Type) {
 			return pkgErr("поле %s: неизвестный тип %q", f.Name, f.Type)
+		}
+		if link && (f.Type == sdk.FieldTarget || f.Type == sdk.FieldSecret) {
+			return pkgErr("поле %s: в форме связи нет полей типа %s", f.Name, f.Type)
 		}
 		if strings.TrimSpace(f.Label) == "" {
 			return pkgErr("поле %s: нет подписи (label)", f.Name)

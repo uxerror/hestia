@@ -137,11 +137,19 @@ type Manager struct {
 	applying map[string]*applyJob // job id → running apply
 	planning map[string]planGrant // grants of plan calls in flight
 	busy     map[string]bool      // plugin id → install/enable/... job running
-	dev      *devPlugin
-	ln       net.Listener
-	bg       sync.WaitGroup
-	ctx      context.Context
-	stop     context.CancelFunc
+	// composites are link, compose and removal plans (several steps).
+	composites map[string]*compositePlan
+	// linkCalls are link.* calls in flight (device grants act during them).
+	linkCalls map[string]linkCall
+	// instJobs are the instances an apply/link/compose job works on.
+	instJobs       map[int64]bool
+	linksCheckedAt time.Time
+	devs           []*devPlugin
+	cacheMu        sync.Mutex // containers cache
+	ln             net.Listener
+	bg             sync.WaitGroup
+	ctx            context.Context
+	stop           context.CancelFunc
 }
 
 // pendingInstall is a version being installed: its process may connect
@@ -204,6 +212,9 @@ func (m *Manager) Init() *Manager {
 	m.applying = map[string]*applyJob{}
 	m.planning = map[string]planGrant{}
 	m.busy = map[string]bool{}
+	m.composites = map[string]*compositePlan{}
+	m.linkCalls = map[string]linkCall{}
+	m.instJobs = map[int64]bool{}
 	m.ctx, m.stop = context.WithCancel(context.Background())
 	_ = os.RemoveAll(m.uploadDir())
 	// Drafts belong to plans, which live in memory only.
@@ -229,6 +240,7 @@ func (m *Manager) Start() {
 				return
 			case <-t.C:
 				m.refreshAll(m.ctx)
+				m.refreshLinks(m.ctx)
 			}
 		}
 	}()
@@ -240,7 +252,7 @@ func (m *Manager) Close() {
 	m.mu.Lock()
 	ln := m.ln
 	m.ln = nil
-	dev := m.dev
+	devs := m.devs
 	var conns []*session
 	for _, s := range m.conns {
 		conns = append(conns, s)
@@ -252,8 +264,8 @@ func (m *Manager) Close() {
 	for _, s := range conns {
 		_ = s.conn.Close()
 	}
-	if dev != nil {
-		dev.stop()
+	for _, d := range devs {
+		d.stop()
 	}
 	m.bg.Wait()
 }
@@ -438,7 +450,7 @@ func (m *Manager) hello(ctx context.Context, s *session, params json.RawMessage)
 			return nil, denied
 		}
 		if okDB {
-			if man, err := ParseManifest([]byte(p.Manifest)); err == nil {
+			if man, err := storedManifest(p.Manifest); err == nil {
 				perms = man.Permissions
 			}
 		}
@@ -486,7 +498,7 @@ func (m *Manager) hello(ctx context.Context, s *session, params json.RawMessage)
 		return nil, err
 	}
 	slog.Info("плагин подключён", "id", h.ID, "version", h.Version, "dev", dev)
-	return &sdk.Welcome{Protocol: sdk.Protocol, HestiaVersion: m.Version, Instances: insts}, nil
+	return &sdk.Welcome{Protocol: sdk.Protocol, HestiaVersion: m.Version, Instances: insts, Links: m.welcomeLinks(ctx, h.ID)}, nil
 }
 
 func (m *Manager) welcomeInstances(ctx context.Context, id string) ([]sdk.Instance, error) {

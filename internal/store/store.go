@@ -266,6 +266,52 @@ CREATE TABLE plugin_catalog (
 	error      TEXT NOT NULL DEFAULT ''
 );
 `},
+	// 2a-2: links between instances and to devices. plugin_grants is
+	// rebuilt: a target may be granted to an instance both directly and
+	// through links (via_link), so the old primary key no longer fits.
+	{9, `
+CREATE TABLE plugin_links (
+	id                INTEGER PRIMARY KEY,
+	kind              TEXT NOT NULL CHECK (kind IN ('service', 'device')),
+	provider_instance INTEGER NOT NULL REFERENCES plugin_instances(id),
+	provider_port     TEXT NOT NULL,
+	consumer_instance INTEGER REFERENCES plugin_instances(id),
+	consumer_port     TEXT,
+	device_ref        TEXT,
+	config            TEXT NOT NULL DEFAULT '{}',
+	binding           TEXT NOT NULL DEFAULT '{}',
+	status            TEXT NOT NULL DEFAULT 'unknown',
+	detail            TEXT NOT NULL DEFAULT '',
+	created_at        INTEGER NOT NULL,
+	checked_at        INTEGER,
+	CHECK ((kind = 'service' AND consumer_instance IS NOT NULL AND consumer_port IS NOT NULL AND device_ref IS NULL)
+	    OR (kind = 'device' AND consumer_instance IS NULL AND device_ref IS NOT NULL))
+);
+CREATE UNIQUE INDEX plugin_links_service ON plugin_links(provider_instance, provider_port, consumer_instance, consumer_port) WHERE kind = 'service';
+CREATE UNIQUE INDEX plugin_links_device ON plugin_links(provider_instance, provider_port, device_ref) WHERE kind = 'device';
+CREATE INDEX plugin_links_consumer ON plugin_links(consumer_instance);
+CREATE TABLE plugin_grants_new (
+	id          INTEGER PRIMARY KEY,
+	instance_id INTEGER NOT NULL REFERENCES plugin_instances(id) ON DELETE CASCADE,
+	target_kind TEXT NOT NULL,
+	target_ref  TEXT NOT NULL,
+	via_link    INTEGER REFERENCES plugin_links(id) ON DELETE CASCADE
+);
+INSERT INTO plugin_grants_new(instance_id, target_kind, target_ref)
+	SELECT instance_id, target_kind, target_ref FROM plugin_grants;
+DROP TABLE plugin_grants;
+ALTER TABLE plugin_grants_new RENAME TO plugin_grants;
+CREATE UNIQUE INDEX plugin_grants_own ON plugin_grants(instance_id, target_ref) WHERE via_link IS NULL;
+CREATE UNIQUE INDEX plugin_grants_link ON plugin_grants(instance_id, target_ref, via_link) WHERE via_link IS NOT NULL;
+CREATE INDEX plugin_grants_via ON plugin_grants(via_link);
+ALTER TABLE plugin_instances ADD COLUMN containers TEXT NOT NULL DEFAULT '[]';
+CREATE TABLE map_positions (
+	node_id    TEXT PRIMARY KEY,
+	x          REAL NOT NULL,
+	y          REAL NOT NULL,
+	updated_at INTEGER NOT NULL
+);
+`},
 }
 
 // KnownSchema is the newest schema version this binary can work with.

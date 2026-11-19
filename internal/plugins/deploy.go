@@ -176,7 +176,11 @@ func (m *Manager) deployCall(ctx context.Context, s *session, method string, par
 			pl, _, err := m.deployPlan(ctx, sp)
 			return pl, err
 		}
-		return m.deployUp(ctx, a, sp)
+		st, err := m.deployUp(ctx, a, sp)
+		if err == nil {
+			m.cacheContainers(ctx, p.Instance, p.Target, sp.project, st.Containers)
+		}
+		return st, err
 	case sdk.MethodDeployDown:
 		var p sdk.DeployDownRequest
 		if err := json.Unmarshal(params, &p); err != nil {
@@ -193,7 +197,11 @@ func (m *Manager) deployCall(ctx context.Context, s *session, method string, par
 		if err != nil {
 			return nil, err
 		}
-		return struct{}{}, m.deployDown(ctx, a, sp, p.Volumes)
+		if err := m.deployDown(ctx, a, sp, p.Volumes); err != nil {
+			return nil, err
+		}
+		m.cacheContainers(ctx, p.Instance, p.Target, sp.project, nil)
+		return struct{}{}, nil
 	case sdk.MethodDeployStatus:
 		var p sdk.DeployStatusRequest
 		if err := json.Unmarshal(params, &p); err != nil {
@@ -206,9 +214,52 @@ func (m *Manager) deployCall(ctx context.Context, s *session, method string, par
 		if err != nil {
 			return nil, err
 		}
-		return m.deployStatus(ctx, sp)
+		st, err := m.deployStatus(ctx, sp)
+		if err == nil {
+			m.cacheContainers(ctx, p.Instance, p.Target, sp.project, st.Containers)
+		}
+		return st, err
 	}
 	return nil, badParams("метод %s не поддерживается", method)
+}
+
+// cachedProject is the last known state of one compose project of an
+// instance (plugin_instances.containers holds a list of them).
+type cachedProject struct {
+	Target     string                `json:"target"`
+	Project    string                `json:"project"`
+	Containers []sdk.DeployContainer `json:"containers"`
+}
+
+// cacheContainers records the containers of a project (nil: it is gone) so
+// that the map shows them without asking the target.
+func (m *Manager) cacheContainers(ctx context.Context, iid int64, ref, project string, cs []sdk.DeployContainer) {
+	ctx = context.WithoutCancel(ctx)
+	m.cacheMu.Lock()
+	defer m.cacheMu.Unlock() // serialises the read-modify-write
+	in, err := m.Store.GetInstance(ctx, iid)
+	if err != nil {
+		return
+	}
+	var list []cachedProject
+	_ = json.Unmarshal([]byte(in.Containers), &list)
+	out := []cachedProject{}
+	for _, p := range list {
+		if p.Target != ref || p.Project != project {
+			out = append(out, p)
+		}
+	}
+	if cs != nil {
+		if len(cs) > 100 {
+			cs = cs[:100]
+		}
+		out = append(out, cachedProject{Target: ref, Project: project, Containers: cs})
+	}
+	if len(out) > 20 {
+		out = out[len(out)-20:]
+	}
+	b, _ := json.Marshal(out)
+	_ = m.Store.SetInstanceContainers(ctx, iid, string(b))
 }
 
 // applyFor finds the running apply job of this plugin and instance.
@@ -421,6 +472,7 @@ func parsePS(out string) []sdk.DeployContainer {
 	}
 	type row struct {
 		Name       string `json:"Name"`
+		Image      string `json:"Image"`
 		Service    string `json:"Service"`
 		State      string `json:"State"`
 		Status     string `json:"Status"`
@@ -442,7 +494,7 @@ func parsePS(out string) []sdk.DeployContainer {
 	}
 	cs := []sdk.DeployContainer{}
 	for _, r := range rows {
-		c := sdk.DeployContainer{Name: r.Name, Service: r.Service, State: r.State, Status: r.Status, Health: r.Health,
+		c := sdk.DeployContainer{Name: r.Name, Service: r.Service, Image: r.Image, State: r.State, Status: r.Status, Health: r.Health,
 			ExitCode: r.ExitCode, Ports: []sdk.DeployPort{}}
 		for _, p := range r.Publishers {
 			if p.PublishedPort == 0 {

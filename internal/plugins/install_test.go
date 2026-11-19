@@ -422,3 +422,43 @@ func TestFirstPluginNeedsControllerRestart(t *testing.T) {
 	}
 	_ = os.Chmod(filepath.Join(h.root, "run", "hestia"), 0o755)
 }
+
+// The unit template (UMask=0077) and the drop-ins are rewritten when any
+// plugin is installed or updated and their content differs.
+func TestUnitTemplateRefresh(t *testing.T) {
+	h := newHarness(t)
+	key := newKey(t)
+	if !strings.Contains(string(unitTemplate), "\nUMask=0077\n") {
+		t.Fatal("UMask missing in the unit template")
+	}
+	if j := h.install(pkgFor(t, key, "v0.1.0")); j.Status != store.JobDone {
+		t.Fatal(jobLog(j))
+	}
+	// An older Hestia left another template and a changed drop-in.
+	old := strings.Replace(string(unitTemplate), "UMask=0077\n", "", 1)
+	if err := os.WriteFile(h.path(unitPath), []byte(old), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dropin := h.path(dropinDir("demo") + "/10-hestia.conf")
+	if err := os.WriteFile(dropin, []byte("[Service]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Another plugin is installed: both files come back, systemd reloads.
+	other := testPackage(t, key, func(m *sdk.Manifest) { m.ID, m.Name = "other", "Other" })
+	before := strings.Count(h.systemctlLog(), "daemon-reload")
+	j := h.install(other)
+	if j.Status != store.JobDone || !strings.Contains(jobLog(j), "Шаблон юнита плагинов обновлён") {
+		t.Fatal(jobLog(j))
+	}
+	if readFile(t, h.path(unitPath)) != string(unitTemplate) || readFile(t, dropin) != string(noNetworkConf) {
+		t.Fatal("template or drop-in not rewritten")
+	}
+	if strings.Count(h.systemctlLog(), "daemon-reload") <= before {
+		t.Fatal("no daemon-reload")
+	}
+	// Unchanged files are not written again.
+	j = h.install(pkgFor(t, key, "v0.2.0"))
+	if j.Status != store.JobDone || strings.Contains(jobLog(j), "Шаблон юнита плагинов обновлён") {
+		t.Fatal(jobLog(j))
+	}
+}

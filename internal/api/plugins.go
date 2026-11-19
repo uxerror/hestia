@@ -273,3 +273,119 @@ func (s *server) pluginFromCatalog(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, res)
 }
+
+// ---- links, composite plans, graph ----
+
+func (s *server) graphView(w http.ResponseWriter, r *http.Request) {
+	g, err := s.Plugins.Graph(r.Context())
+	if err != nil {
+		s.pluginError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, g)
+}
+
+func (s *server) graphPositionsSave(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	var req struct {
+		Positions map[string]store.Position `json:"positions"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	if err := s.Plugins.SavePositions(r.Context(), req.Positions); err != nil {
+		s.pluginError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *server) graphPositionsClear(w http.ResponseWriter, r *http.Request) {
+	if err := s.Plugins.ClearPositions(r.Context()); err != nil {
+		s.pluginError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *server) linkCandidates(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	iid, err := strconv.ParseInt(q.Get("instance"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "instance: id экземпляра")
+		return
+	}
+	c, err := s.Plugins.LinkCandidates(r.Context(), iid, q.Get("port"), q.Get("dir"))
+	if err != nil {
+		s.pluginError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, c)
+}
+
+func (s *server) linkPlan(w http.ResponseWriter, r *http.Request) {
+	var req plugins.LinkPlanRequest
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	pv, err := s.Plugins.LinkPlan(r.Context(), req)
+	if err != nil {
+		s.pluginError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, pv)
+}
+
+func linkID(w http.ResponseWriter, r *http.Request) (int64, bool) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "связь не найдена")
+		return 0, false
+	}
+	return id, true
+}
+
+func (s *server) linkChangePlan(w http.ResponseWriter, r *http.Request) {
+	id, ok := linkID(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		Action string `json:"action"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	pv, err := s.Plugins.LinkChangePlan(r.Context(), id, req.Action)
+	if err != nil {
+		s.pluginError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, pv)
+}
+
+func (s *server) linkGet(w http.ResponseWriter, r *http.Request) {
+	id, ok := linkID(w, r)
+	if !ok {
+		return
+	}
+	v, err := s.Plugins.Link(r.Context(), id, r.URL.Query().Get("status") == "refresh")
+	if err != nil {
+		s.pluginError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, v)
+}
+
+func (s *server) composePlan(w http.ResponseWriter, r *http.Request) {
+	var req plugins.ComposeRequest
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	pv, err := s.Plugins.ComposePlan(r.Context(), req)
+	if err != nil {
+		s.pluginError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, pv)
+}

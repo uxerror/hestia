@@ -56,7 +56,8 @@ define plugin_args
 endef
 
 # plugin builds and signs a plugin package, e.g.
-#   make plugin ID=hestia-hello VERSION=v0.2.0
+#   make plugin ID=hestia-hello VERSION=v0.3.0
+#   make plugin ID=hestia-probe VERSION=v0.1.0
 # VERSION must match manifest.json (plugin-pack checks it).
 plugin:
 	$(plugin_args)

@@ -10,6 +10,7 @@ export const PERMISSIONS = {
   'deploy.docker': 'Разворачивать Docker-контейнеры',
   'net.outbound': 'Сетевые подключения напрямую',
   'inventory.read': 'Читать карту сети',
+  'links.client': 'Настраивать подключение на выбранных устройствах',
 };
 
 export function permissionLabel(p) {
@@ -100,9 +101,11 @@ export function safeUrl(u) {
   return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : '';
 }
 
-// provides/requires item → "http.service" or "http.service (name)".
+// provides/requires item → "Веб-страница (http.service)" when it has a
+// label, otherwise "http.service" or "http.service (name)".
 export function capabilityText(c) {
   if (!c) return '';
+  if (c.label) return `${c.label} (${c.type})`;
   return c.name ? `${c.type} (${c.name})` : String(c.type || '');
 }
 

@@ -171,6 +171,22 @@ func (m *Manager) granted(ctx context.Context, iid int64, ref string) (bool, err
 	if err != nil || ok {
 		return ok, err
 	}
+	// The device of a link: only within a link.* call of that link and
+	// while the link (and its via_link grant) exists.
+	m.mu.Lock()
+	var calls []linkCall
+	for _, lc := range m.linkCalls {
+		if lc.instanceID == iid && lc.device == ref {
+			calls = append(calls, lc)
+		}
+	}
+	m.mu.Unlock()
+	for _, lc := range calls {
+		ok, err := m.Store.HasLinkGrant(ctx, iid, ref, lc.linkID)
+		if err != nil || ok {
+			return ok, err
+		}
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	now := m.Now()
@@ -338,6 +354,9 @@ func (m *Manager) secretCall(ctx context.Context, pid, method string, params jso
 	var p sdk.SecretRequest
 	if err := json.Unmarshal(params, &p); err != nil {
 		return nil, badParams("неверные параметры %s", method)
+	}
+	if strings.HasPrefix(p.Name, linkSecretP) {
+		return m.linkSecretGet(ctx, pid, method, p)
 	}
 	if !reSecretName.MatchString(p.Name) {
 		return nil, badParams("неверное имя секрета %q", p.Name)

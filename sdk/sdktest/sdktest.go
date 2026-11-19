@@ -305,3 +305,47 @@ func (h *Host) Status(ctx context.Context, inst sdk.Instance) (sdk.Status, error
 	err := h.conn.Call(ctx, sdk.MethodStatus, map[string]any{"instance": inst}, &out)
 	return out, err
 }
+
+// OnExec answers target.exec.
+func (h *Host) OnExec(fn func(sdk.ExecRequest) (sdk.ExecResult, error)) {
+	h.Handle(sdk.MethodTargetExec, func(p json.RawMessage) (any, error) {
+		var req sdk.ExecRequest
+		if err := json.Unmarshal(p, &req); err != nil {
+			return nil, rpc.Errorf(rpc.CodeInvalidParams, "sdktest: %v", err)
+		}
+		return fn(req)
+	})
+}
+
+// LinkPlan calls link.plan.
+func (h *Host) LinkPlan(ctx context.Context, req sdk.LinkRequest) (sdk.Plan, error) {
+	var out sdk.Plan
+	err := h.conn.Call(ctx, sdk.MethodLinkPlan, req, &out)
+	return out, err
+}
+
+// LinkApply calls link.apply and returns the binding (provider).
+func (h *Host) LinkApply(ctx context.Context, req sdk.LinkRequest) (json.RawMessage, error) {
+	var out sdk.LinkResult
+	err := h.conn.CallNoTimeout(ctx, sdk.MethodLinkApply, req, &out)
+	return out.Binding, err
+}
+
+// LinkRemove calls link.remove.
+func (h *Host) LinkRemove(ctx context.Context, req sdk.LinkRequest) error {
+	return h.conn.CallNoTimeout(ctx, sdk.MethodLinkRemove, req, nil)
+}
+
+// LinkStatus calls link.status.
+func (h *Host) LinkStatus(ctx context.Context, req sdk.LinkRequest) (sdk.LinkStatus, error) {
+	var out sdk.LinkStatus
+	err := h.conn.Call(ctx, sdk.MethodLinkStatus, req, &out)
+	return out, err
+}
+
+// LinkRefresh calls link.refresh and returns the binding.
+func (h *Host) LinkRefresh(ctx context.Context, req sdk.LinkRequest) (json.RawMessage, error) {
+	var out sdk.LinkResult
+	err := h.conn.Call(ctx, sdk.MethodLinkRefresh, req, &out)
+	return out.Binding, err
+}

@@ -35,7 +35,7 @@ func testManifest(key ed25519.PrivateKey, mod func(*sdk.Manifest)) []byte {
 		Protocol: 1, ID: "demo", Name: "Demo", Version: "v0.1.0", Description: "test",
 		Author:      sdk.Author{Name: "Tester", Key: pubOf(key)},
 		Permissions: []string{sdk.PermTargetsRead, sdk.PermTargetsExec},
-		Provides:    []sdk.Port{{Type: "demo.hello"}}, MultiInstance: true,
+		Provides:    []sdk.Port{{Type: "http.service"}}, MultiInstance: true,
 		Schema: sdk.Schema{Fields: []sdk.Field{
 			{Name: "target", Type: sdk.FieldTarget, Label: "Где", Required: true},
 			{Name: "message", Type: sdk.FieldString, Label: "Текст", Default: "hi", MaxLen: 20},

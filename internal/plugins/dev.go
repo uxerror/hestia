@@ -27,11 +27,14 @@ type devPlugin struct {
 
 	mu      sync.Mutex
 	cmd     *exec.Cmd
+	token   string // of the running child
+	id      string // plugin id once registered
 	stopped bool
 	err     string
 }
 
-// StartDev starts the plugin binary at path as a child process.
+// StartDev starts the plugin binary at path as a child process; it may be
+// called for several binaries (one plugin each).
 func (m *Manager) StartDev(path string) error {
 	abs, err := exec.LookPath(path)
 	if err != nil {
@@ -39,22 +42,47 @@ func (m *Manager) StartDev(path string) error {
 	}
 	d := &devPlugin{m: m, path: abs}
 	m.mu.Lock()
-	m.dev = d
+	for _, o := range m.devs {
+		if o.path == abs {
+			m.mu.Unlock()
+			return errors.New("плагин " + path + " указан дважды")
+		}
+	}
+	m.devs = append(m.devs, d)
 	m.mu.Unlock()
 	return d.spawn()
 }
 
-// DevError returns why the dev plugin could not be registered ("" if fine).
+// DevError returns why dev plugins could not be registered ("" if fine).
 func (m *Manager) DevError() string {
 	m.mu.Lock()
-	d := m.dev
+	devs := append([]*devPlugin(nil), m.devs...)
 	m.mu.Unlock()
-	if d == nil {
-		return ""
+	var errs []string
+	for _, d := range devs {
+		d.mu.Lock()
+		if d.err != "" {
+			errs = append(errs, d.err)
+		}
+		d.mu.Unlock()
 	}
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	return d.err
+	return strings.Join(errs, "; ")
+}
+
+// devFor returns the dev plugin whose child holds the token.
+func (m *Manager) devFor(token string) *devPlugin {
+	m.mu.Lock()
+	devs := append([]*devPlugin(nil), m.devs...)
+	m.mu.Unlock()
+	for _, d := range devs {
+		d.mu.Lock()
+		ok := token != "" && d.token == token
+		d.mu.Unlock()
+		if ok {
+			return d
+		}
+	}
+	return nil
 }
 
 type childPipe struct {
@@ -97,7 +125,7 @@ func (d *devPlugin) spawn() error {
 		return err
 	}
 	d.mu.Lock()
-	d.cmd = cmd
+	d.cmd, d.token = cmd, tok
 	d.mu.Unlock()
 	go func() {
 		sc := bufio.NewScanner(stderr)
@@ -138,8 +166,9 @@ func (d *devPlugin) spawn() error {
 func (d *devPlugin) stop() {
 	d.mu.Lock()
 	d.stopped = true
+	id := d.id
 	d.mu.Unlock()
-	if s := d.m.conn(d.m.devID()); s != nil {
+	if s := d.m.conn(id); s != nil && s.devToken != "" {
 		_ = s.conn.Close()
 	}
 	d.mu.Lock()
@@ -157,34 +186,10 @@ func (d *devPlugin) fail(msg string) {
 	slog.Error("dev-плагин", "err", msg)
 }
 
-func (m *Manager) devID() string {
-	for _, s := range m.snapshotConns() {
-		s.mu.Lock()
-		dev, id := s.dev, s.pluginID
-		s.mu.Unlock()
-		if dev {
-			return id
-		}
-	}
-	return ""
-}
-
-func (m *Manager) snapshotConns() []*session {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	out := make([]*session, 0, len(m.conns))
-	for _, s := range m.conns {
-		out = append(out, s)
-	}
-	return out
-}
-
 // registerDev takes the manifest from the dev process and records the
 // plugin with source "dev" (no signature: the flag is the trust).
 func (m *Manager) registerDev(s *session, h sdk.Hello) {
-	m.mu.Lock()
-	d := m.dev
-	m.mu.Unlock()
+	d := m.devFor(s.devToken)
 	fail := func(msg string) {
 		if d != nil {
 			d.fail(msg)
@@ -236,7 +241,7 @@ func (m *Manager) registerDev(s *session, h sdk.Hello) {
 	s.mu.Unlock()
 	if d != nil {
 		d.mu.Lock()
-		d.err = ""
+		d.err, d.id = "", man.ID
 		d.mu.Unlock()
 	}
 	slog.Info("dev-плагин зарегистрирован", "id", man.ID, "version", man.Version)

@@ -12,6 +12,7 @@ Environment=HESTIA_SOCKET=/run/hestia/plugins.sock
 LoadCredential=token:/var/lib/hestia-plugins/%i/token
 DynamicUser=yes
 StateDirectory=hestia-plugin/%i
+UMask=0077
 ProtectSystem=strict
 ProtectHome=yes
 InaccessiblePaths=-/var/lib/hestia -/etc/hestia

@@ -305,7 +305,7 @@ func (m *Manager) catalogUpdate(p store.Plugin, e CatalogEntry) *UpdateDiff {
 	if CheckMinHestia(sdk.Manifest{MinHestia: e.MinHestia}, m.Version) != nil {
 		return nil
 	}
-	old, _ := ParseManifest([]byte(p.Manifest))
+	old, _ := storedManifest(p.Manifest)
 	d := &UpdateDiff{From: p.Version, To: e.Version, NewPermissions: []string{}}
 	for _, perm := range e.Permissions {
 		if !slices.Contains(old.Permissions, perm) {

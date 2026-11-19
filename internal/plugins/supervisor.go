@@ -100,32 +100,66 @@ func (s systemd) Active(ctx context.Context, id string) (string, error) {
 	return st, nil
 }
 
-// prepare writes the shared files (unit template, tmpfiles, socket
-// directory) when missing or outdated and reloads systemd.
-func (s systemd) prepare(ctx context.Context, log func(string)) error {
-	if err := s.sh.PutFile(ctx, log, s.l.p(unitPath), unitTemplate, "0644", "root:root"); err != nil {
-		return err
-	}
-	if _, err := s.run(ctx, "test -f "+s.l.q(tmpfilesPath)); err != nil {
-		if _, err := s.run(ctx, "mkdir -p "+s.l.q("/etc/tmpfiles.d")); err != nil {
-			return err
+// prepare writes the shared files (unit template, tmpfiles, the drop-in of
+// the controller) when missing or different from this version's, and
+// creates the socket directory. It reports whether a unit file changed
+// (systemd must be reloaded).
+func (s systemd) prepare(ctx context.Context, log func(string)) (bool, error) {
+	changed := false
+	for _, f := range []struct {
+		dir, path string
+		data      []byte
+	}{
+		{"/etc/systemd/system", unitPath, unitTemplate},
+		{"/etc/tmpfiles.d", tmpfilesPath, tmpfilesConf},
+		{"/etc/systemd/system/hestia.service.d", controllerDropinPath, controllerDropin},
+	} {
+		c, err := s.ensureFile(ctx, log, f.dir, f.path, f.data)
+		if err != nil {
+			return changed, err
 		}
-		if err := s.sh.PutFile(ctx, log, s.l.p(tmpfilesPath), tmpfilesConf, "0644", "root:root"); err != nil {
-			return err
-		}
+		changed = changed || c
 	}
 	if _, err := s.run(ctx, "systemd-tmpfiles --create "+s.l.q(tmpfilesPath)); err != nil {
-		return fmt.Errorf("каталог сокета: %w", err)
+		return changed, fmt.Errorf("каталог сокета: %w", err)
 	}
-	if _, err := s.run(ctx, "test -f "+s.l.q(controllerDropinPath)); err != nil {
-		if _, err := s.run(ctx, "mkdir -p "+s.l.q("/etc/systemd/system/hestia.service.d")); err != nil {
-			return err
-		}
-		if err := s.sh.PutFile(ctx, log, s.l.p(controllerDropinPath), controllerDropin, "0644", "root:root"); err != nil {
-			return err
-		}
+	return changed, nil
+}
+
+// ensureFile writes a root-owned file unless it already has this content.
+func (s systemd) ensureFile(ctx context.Context, log func(string), dir, path string, data []byte) (bool, error) {
+	cur, err := s.run(ctx, "cat "+s.l.q(path)+" 2>/dev/null || true")
+	if err != nil {
+		return false, err
 	}
-	return nil
+	if cur == string(data) {
+		return false, nil
+	}
+	if _, err := s.run(ctx, "mkdir -p "+s.l.q(dir)); err != nil {
+		return false, err
+	}
+	if err := s.sh.PutFile(ctx, log, s.l.p(path), data, "0644", "root:root"); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// refreshSandboxes brings the drop-ins of the other installed plugins
+// (id → net.outbound) up to this version; it reports whether one changed.
+func (s systemd) refreshSandboxes(ctx context.Context, log func(string), plugins map[string]bool) (bool, error) {
+	changed := false
+	for id, net := range plugins {
+		dir := dropinDir(id)
+		if net {
+			continue // no drop-in: removed when the permission was granted
+		}
+		c, err := s.ensureFile(ctx, log, dir, dir+"/10-hestia.conf", noNetworkConf)
+		if err != nil {
+			return changed, err
+		}
+		changed = changed || c
+	}
+	return changed, nil
 }
 
 // restartController restarts the controller a few seconds later, outside

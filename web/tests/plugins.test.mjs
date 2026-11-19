@@ -59,6 +59,7 @@ test('plugins: permission, state, status and trust labels', async () => {
   assert.equal(p.sourceLabel('url:https://x/y.hpkg'), 'По ссылке https://x/y.hpkg');
   assert.equal(p.capabilityText({ type: 'http.service', name: '' }), 'http.service');
   assert.equal(p.capabilityText({ type: 'db', name: 'pg' }), 'db (pg)');
+  assert.equal(p.capabilityText({ type: 'http.service', name: 'web', label: 'Веб-страница' }), 'Веб-страница (http.service)');
   env.dispose();
 });
 

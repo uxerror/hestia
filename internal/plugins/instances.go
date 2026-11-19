@@ -29,6 +29,9 @@ type PlanView struct {
 	Instance InstanceRefV `json:"instance"`
 	Plan     PlanBody     `json:"plan"`
 	Danger   bool         `json:"danger"`
+	// Steps of a composite plan (link, compose, removal with links); Plan
+	// then holds the actions of all steps.
+	Steps []StepView `json:"steps,omitempty"`
 }
 
 // InstanceRefV names the instance of a plan.
@@ -118,7 +121,7 @@ func (m *Manager) pluginForInstances(ctx context.Context, id string) (store.Plug
 	if err != nil {
 		return p, sdk.Manifest{}, err
 	}
-	man, err := ParseManifest([]byte(p.Manifest))
+	man, err := storedManifest(p.Manifest)
 	if err != nil {
 		return p, man, err
 	}
@@ -262,6 +265,25 @@ func (m *Manager) validate(ctx context.Context, pid string, cfg sdk.Config) erro
 // that it has an id (and grants) while the plugin plans; drafts disappear
 // with their plan.
 func (m *Manager) CreatePlan(ctx context.Context, pid, name string, in map[string]any) (*PlanView, error) {
+	if _, _, err := m.pluginForInstances(ctx, pid); err != nil {
+		return nil, err
+	}
+	st, err := m.prepareCreate(ctx, pid, name, in, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	m.mu.Lock()
+	m.purgeLocked()
+	m.plans[st.id] = st
+	m.mu.Unlock()
+	return st.view(), nil
+}
+
+// prepareCreate checks the form, records the draft instance and asks the
+// plugin for its plan; the plan is not registered. own are the names of
+// other new instances of the same composite plan (plugin id → names);
+// links are the providers the instance will be linked to right after.
+func (m *Manager) prepareCreate(ctx context.Context, pid, name string, in map[string]any, own map[string][]string, links []sdk.PlannedLink) (*planState, error) {
 	_, man, err := m.pluginForInstances(ctx, pid)
 	if err != nil {
 		return nil, err
@@ -270,18 +292,22 @@ func (m *Manager) CreatePlan(ctx context.Context, pid, name string, in map[strin
 	if err != nil {
 		return nil, err
 	}
-	if !man.MultiInstance && len(existing) > 0 {
-		return nil, newErr(http.StatusConflict, "у плагина может быть только один экземпляр")
+	taken := slices.Clone(existing)
+	for _, n := range own[pid] {
+		taken = append(taken, store.PluginInstance{Name: n})
+	}
+	if !man.MultiInstance && len(taken) > 0 {
+		return nil, newErr(http.StatusConflict, "у плагина «%s» может быть только один экземпляр", man.Name)
 	}
 	name = strings.TrimSpace(name)
 	if name == "" {
-		name = defaultName(man.Name, existing)
+		name = defaultName(man.Name, taken)
 	}
 	if len([]rune(name)) > 100 || strings.ContainsAny(name, "\n\r") {
 		return nil, &Error{Status: http.StatusUnprocessableEntity, Msg: "Проверьте поля формы",
 			Fields: []sdk.FieldError{{Field: "name", Msg: "одна строка, не длиннее 100 символов"}}}
 	}
-	for _, e := range existing {
+	for _, e := range taken {
 		if e.Name == name {
 			return nil, &Error{Status: http.StatusUnprocessableEntity, Msg: "Проверьте поля формы",
 				Fields: []sdk.FieldError{{Field: "name", Msg: "экземпляр с таким именем уже есть"}}}
@@ -295,6 +321,7 @@ func (m *Manager) CreatePlan(ctx context.Context, pid, name string, in map[strin
 		return nil, err
 	}
 	m.dropPlansFor(pid, name)
+	m.dropCompositesFor(pid, name)
 	if err := m.Store.DeleteDrafts(ctx, pid, name); err != nil {
 		return nil, err
 	}
@@ -306,13 +333,13 @@ func (m *Manager) CreatePlan(ctx context.Context, pid, name string, in map[strin
 	} else if err != nil {
 		return nil, err
 	}
-	req := sdk.PlanRequest{Instance: sdk.Instance{ID: inst.ID, Name: name, Config: cfg}, Config: cfg, Action: sdk.ActionCreate}
-	pv, err := m.makePlan(ctx, pid, inst.ID, name, req, secs, grants)
+	req := sdk.PlanRequest{Instance: sdk.Instance{ID: inst.ID, Name: name, Config: cfg}, Config: cfg, Action: sdk.ActionCreate, Links: links}
+	st, err := m.buildPlan(ctx, pid, inst.ID, name, req, secs, grants)
 	if err != nil {
 		_ = m.Store.DeleteInstance(context.WithoutCancel(ctx), inst.ID)
 		return nil, err
 	}
-	return pv, nil
+	return st, nil
 }
 
 func defaultName(base string, existing []store.PluginInstance) string {
@@ -358,6 +385,14 @@ func (m *Manager) ChangePlan(ctx context.Context, iid int64, action string, in m
 		}
 	case sdk.ActionRemove:
 		cfg = cur.Config
+		links, err := m.Store.LinksOfInstance(ctx, iid)
+		if err != nil {
+			return nil, err
+		}
+		if len(links) > 0 {
+			// Its links go first, in the same plan.
+			return m.removalPlan(ctx, inst, links)
+		}
 	default:
 		return nil, newErr(http.StatusBadRequest, "action: update или remove")
 	}
@@ -366,6 +401,19 @@ func (m *Manager) ChangePlan(ctx context.Context, iid int64, action string, in m
 }
 
 func (m *Manager) makePlan(ctx context.Context, pid string, iid int64, name string, req sdk.PlanRequest, secs map[string]string, grants []store.PluginGrant) (*PlanView, error) {
+	st, err := m.buildPlan(ctx, pid, iid, name, req, secs, grants)
+	if err != nil {
+		return nil, err
+	}
+	m.mu.Lock()
+	m.purgeLocked()
+	m.plans[st.id] = st
+	m.mu.Unlock()
+	return st.view(), nil
+}
+
+// buildPlan asks the plugin for the plan of an instance change.
+func (m *Manager) buildPlan(ctx context.Context, pid string, iid int64, name string, req sdk.PlanRequest, secs map[string]string, grants []store.PluginGrant) (*planState, error) {
 	done := m.withPlanGrants(iid, grants)
 	pl, err := m.requestPlan(ctx, pid, req)
 	done()
@@ -376,15 +424,23 @@ func (m *Manager) makePlan(ctx context.Context, pid string, iid int64, name stri
 	if err != nil {
 		return nil, err
 	}
-	st := &planState{
+	return &planState{
 		id: randID(), hash: hash, pluginID: pid, instanceID: iid, name: name, action: req.Action,
 		config: req.Config, secrets: secs, grants: grants, req: req, plan: pl, expires: m.Now().Add(planTTL),
+	}, nil
+}
+
+// replan asks the plugin for the plan again (before an apply) and returns
+// it with its hash.
+func (m *Manager) replan(ctx context.Context, st *planState) (sdk.Plan, string, error) {
+	done := m.withPlanGrants(st.instanceID, st.grants)
+	fresh, err := m.requestPlan(ctx, st.pluginID, st.req)
+	done()
+	if err != nil {
+		return fresh, "", err
 	}
-	m.mu.Lock()
-	m.purgeLocked()
-	m.plans[st.id] = st
-	m.mu.Unlock()
-	return st.view(), nil
+	hash, err := planHash(fresh, st.config)
+	return fresh, hash, err
 }
 
 func (st *planState) view() *PlanView {
@@ -465,7 +521,11 @@ func (m *Manager) Apply(ctx context.Context, planID string, req ApplyRequest) (s
 	m.mu.Lock()
 	m.purgeLocked()
 	st := m.plans[planID]
+	cp := m.composites[planID]
 	m.mu.Unlock()
+	if cp != nil {
+		return m.applyComposite(ctx, cp, req)
+	}
 	if st == nil {
 		return store.Job{}, newErr(http.StatusGone, "План устарел или не найден — составьте его заново")
 	}
@@ -478,21 +538,10 @@ func (m *Manager) Apply(ctx context.Context, planID string, req ApplyRequest) (s
 	if _, _, err := m.pluginForInstances(ctx, st.pluginID); err != nil {
 		return store.Job{}, err
 	}
-	m.mu.Lock()
-	for _, a := range m.applying {
-		if a.instanceID == st.instanceID {
-			m.mu.Unlock()
-			return store.Job{}, newErr(http.StatusConflict, "с этим экземпляром уже выполняется задача")
-		}
+	if m.instanceBusy(st.instanceID) {
+		return store.Job{}, newErr(http.StatusConflict, "с этим экземпляром уже выполняется задача")
 	}
-	m.mu.Unlock()
-	done := m.withPlanGrants(st.instanceID, st.grants)
-	fresh, err := m.requestPlan(ctx, st.pluginID, st.req)
-	done()
-	if err != nil {
-		return store.Job{}, err
-	}
-	hash, err := planHash(fresh, st.config)
+	fresh, hash, err := m.replan(ctx, st)
 	if err != nil {
 		return store.Job{}, err
 	}
@@ -509,19 +558,35 @@ func (m *Manager) Apply(ctx context.Context, planID string, req ApplyRequest) (s
 		}
 		return store.Job{}, newErr(http.StatusConflict, "Состояние изменилось, проверьте план ещё раз")
 	}
+	if m.instJobs[st.instanceID] {
+		m.mu.Unlock()
+		return store.Job{}, newErr(http.StatusConflict, "с этим экземпляром уже выполняется задача")
+	}
 	// The plan is used now: it no longer extends grants, the job does.
 	delete(m.plans, planID)
 	a := &applyJob{pluginID: st.pluginID, instanceID: st.instanceID, grants: st.grants,
 		confirmed: st.view().Danger && req.ConfirmDanger}
+	m.instJobs[st.instanceID] = true
 	m.mu.Unlock()
 
 	verb := map[string]string{sdk.ActionCreate: "создание", sdk.ActionUpdate: "изменение", sdk.ActionRemove: "удаление"}[st.action]
 	title := fmt.Sprintf("%s: %s «%s»", st.pluginID, verb, st.name)
 	job, err := m.Runner.Start(JobApply, title, func(ctx context.Context, run *jobs.Run) error {
-		return m.runApply(ctx, run, st, fresh, a)
+		defer m.releaseInstances(st.instanceID)
+		if err := m.runApply(ctx, run, st, fresh, a); err != nil {
+			return err
+		}
+		if st.action == sdk.ActionUpdate {
+			// The provider may give other data now (address, port).
+			m.refreshProviderLinks(ctx, run, st.instanceID)
+		}
+		return nil
 	})
-	if err != nil && st.action == sdk.ActionCreate {
-		_ = m.Store.DeleteInstance(context.WithoutCancel(ctx), st.instanceID)
+	if err != nil {
+		m.releaseInstances(st.instanceID)
+		if st.action == sdk.ActionCreate {
+			_ = m.Store.DeleteInstance(context.WithoutCancel(ctx), st.instanceID)
+		}
 	}
 	return job, err
 }
@@ -587,7 +652,7 @@ func (m *Manager) runApply(ctx context.Context, run *jobs.Run, st *planState, pl
 	if gerr != nil {
 		return gerr
 	}
-	areq := sdk.ApplyRequest{JobID: run.ID(), Instance: sdkInstance(cur), Config: st.config, Action: st.action, Plan: pl}
+	areq := sdk.ApplyRequest{JobID: run.ID(), Instance: sdkInstance(cur), Config: st.config, Action: st.action, Plan: pl, Links: st.req.Links}
 	areq.Instance.Name = st.name
 	if st.action == sdk.ActionCreate {
 		areq.Instance.Config = st.config

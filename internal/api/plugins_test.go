@@ -29,10 +29,12 @@ import (
 )
 
 // buildHello compiles the demo plugin (the build cache makes repeats cheap).
-func buildHello(t *testing.T) string {
+func buildHello(t *testing.T) string { return buildPlugin(t, "hestia-hello") }
+
+func buildPlugin(t *testing.T, id string) string {
 	t.Helper()
 	bin := filepath.Join(t.TempDir(), "plugin")
-	cmd := exec.Command("go", "build", "-o", bin, "github.com/uxerror/hestia/plugins/hestia-hello")
+	cmd := exec.Command("go", "build", "-o", bin, "github.com/uxerror/hestia/plugins/"+id)
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("go build: %v\n%s", err, out)
@@ -45,11 +47,17 @@ type pluginEnv struct {
 	pm  *plugins.Manager
 	tg  *deploytest.Target
 	ref string
+	// dev is a second fake target (a device for links).
+	dev    *deploytest.Target
+	devRef string
 }
 
-func newPluginEnv(t *testing.T) *pluginEnv {
+func newPluginEnv(t *testing.T, extra ...string) *pluginEnv {
 	t.Helper()
-	bin := buildHello(t)
+	bins := []string{buildHello(t)}
+	for _, id := range extra {
+		bins = append(bins, buildPlugin(t, id))
+	}
 	dir := t.TempDir()
 	st, err := store.Open(dir)
 	if err != nil {
@@ -75,11 +83,18 @@ func newPluginEnv(t *testing.T) *pluginEnv {
 	if err := st.CreateTarget(context.Background(), tg); err != nil {
 		t.Fatal(err)
 	}
+	ft2 := deploytest.New(t, id.Signer.PublicKey())
+	tg2 := &store.Target{Kind: store.KindSSH, Name: "nas", Host: ft2.Srv.Host, Port: ft2.Srv.Port, SSHUser: "root", HostKeyFP: ft2.Srv.HostKeyFP()}
+	if err := st.CreateTarget(context.Background(), tg2); err != nil {
+		t.Fatal(err)
+	}
 	pm := (&plugins.Manager{Store: st, Secrets: sec, Runner: runner, Identity: id, Version: "test", DataDir: dir,
 		Mode: "serve", SocketPath: "-", GitHub: &update.GitHub{BaseURL: "http://127.0.0.1:1"}, DeployPoll: 20 * time.Millisecond}).Init()
 	pm.Start()
-	if err := pm.StartDev(bin); err != nil {
-		t.Fatal(err)
+	for _, bin := range bins {
+		if err := pm.StartDev(bin); err != nil {
+			t.Fatal(err)
+		}
 	}
 	h := api.New(api.Config{
 		Store: st, Auth: auth.New(st), Runner: runner, Identity: id, Plugins: pm, Mode: "serve", Version: "test",
@@ -89,7 +104,7 @@ func newPluginEnv(t *testing.T) *pluginEnv {
 	jar, _ := cookiejar.New(nil)
 	t.Cleanup(func() { hs.Close(); pm.Close(); runner.Shutdown(); _ = st.Close() })
 	e := &env{srv: hs, client: &http.Client{Jar: jar}, runner: runner, store: st}
-	return &pluginEnv{env: e, pm: pm, tg: ft, ref: fmt.Sprintf("ssh:%d", tg.ID)}
+	return &pluginEnv{env: e, pm: pm, tg: ft, ref: fmt.Sprintf("ssh:%d", tg.ID), dev: ft2, devRef: fmt.Sprintf("ssh:%d", tg2.ID)}
 }
 
 func decode(t *testing.T, b []byte, v any) {
@@ -144,7 +159,7 @@ func TestPluginDevEndToEnd(t *testing.T) {
 	for {
 		_, b := e.do(t, e.client, "GET", "/api/v1/plugins", "")
 		decode(t, b, &list)
-		if len(list.Plugins) == 1 && list.Plugins[0].State == "connected" && len(list.Plugins[0].Permissions) == 3 {
+		if len(list.Plugins) == 1 && list.Plugins[0].State == "connected" && len(list.Plugins[0].Permissions) == 5 {
 			break
 		}
 		if time.Now().After(deadline) {
@@ -153,8 +168,8 @@ func TestPluginDevEndToEnd(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 	}
 	p := list.Plugins[0]
-	if p.ID != "hestia-hello" || p.Version != "v0.2.0" || !p.Dev || p.Source != "dev" || list.Available ||
-		strings.Join(p.Permissions, ",") != "targets.read,deploy.docker,net.outbound" {
+	if p.ID != "hestia-hello" || p.Version != "v0.3.0" || !p.Dev || p.Source != "dev" || list.Available ||
+		strings.Join(p.Permissions, ",") != "targets.read,targets.exec,deploy.docker,net.outbound,links.client" {
 		t.Fatalf("%+v %+v", p, list)
 	}
 

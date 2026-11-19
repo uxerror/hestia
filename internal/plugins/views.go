@@ -92,7 +92,7 @@ func (m *Manager) List(ctx context.Context) (List, error) {
 }
 
 func (m *Manager) view(p store.Plugin) PluginView {
-	man, _ := ParseManifest([]byte(p.Manifest))
+	man, _ := storedManifest(p.Manifest)
 	v := PluginView{
 		ID: p.ID, Name: man.Name, Version: p.Version, PrevVersion: p.PrevVersion, Description: man.Description,
 		Homepage: man.Homepage, Source: p.Source, Dev: p.Source == store.PluginSourceDev, Enabled: p.Enabled,

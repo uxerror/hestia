@@ -8,8 +8,17 @@
 - Поля формы: `target` — где запустить (Debian/Ubuntu; Docker Hestia поставит сама, если его нет),
   `port` — порт на цели (8080), `message` — приветствие.
 - Права: `targets.read` (адрес цели для проверки), `deploy.docker` (развёртывание через Hestia),
-  `net.outbound` (сам плагин делает GET к whoami).
-- Предоставляет `http.service`.
+  `net.outbound` (сам плагин делает GET к whoami), `targets.exec` и `links.client` (запись в
+  `/etc/hosts` устройства по связи).
+- Предоставляет порт `web` (`http.service`, «Веб-страница»):
+  - связь с сервисом (например, [Hestia Probe](../hestia-probe/README.md)) — отдаёт binding
+    `{url, host, port, scheme}` (адрес цели и порт whoami);
+  - связь с устройством (`client: true`) — строка `<IP цели> <имя> # hestia-link-<id>` в `/etc/hosts`
+    устройства; имя — поле формы связи `hostname` (по умолчанию `hello.home`). Файл правится
+    атомарно (временная копия с теми же правами + `mv`), строка заменяется и удаляется по маркеру;
+    статус — строка на месте и `getent hosts <имя>` даёт адрес цели;
+  - `link.refresh` после изменения экземпляра (другой порт или цель) — новый binding; Hestia сама
+    применит его у потребителя и на устройстве.
 
 ## Как устроен
 
@@ -23,7 +32,9 @@
     GET до ответа 200 за 20 с; при смене цели — сначала `deploy.down` на старой;
   - `Status` — GET: `ok` / `degraded` (не 200) / `down` (нет ответа), ссылка на сервис;
   - удаление экземпляра — `deploy.down` с `volumes: true`.
-- `hello_test.go` — юнит-тесты на `sdk/sdktest` (фейковая Hestia: `OnDeployPlan`, `OnDeployUp`, …).
+- `links.go` — `sdk.Linker`: `LinkPlan`/`LinkApply`/`LinkRemove`/`LinkStatus`/`LinkRefresh`.
+- `hello_test.go`, `links_test.go` — юнит-тесты на `sdk/sdktest` (фейковая Hestia: `OnDeployPlan`,
+  `OnDeployUp`, `OnExec`, `LinkApply`, …; «устройство» — временный каталог и белый список утилит).
 
 Протокол и правила для compose-файла — `docs/plugins/protocol.md`.
 
@@ -66,8 +77,8 @@ go run ./cmd/hestia serve --listen 127.0.0.1:8080 --data /tmp/hestia-dev --plugi
 ## Официальная сборка (для сопровождающего)
 
 ```sh
-make plugin ID=hestia-hello VERSION=v0.2.0          # build/plugins/hestia-hello/plugin + dist/plugins/*.hpkg
-make plugin-publish ID=hestia-hello VERSION=v0.2.0  # тег plugin/hestia-hello/v0.2.0, каталог plugins-catalog
+make plugin ID=hestia-hello VERSION=v0.3.0          # build/plugins/hestia-hello/plugin + dist/plugins/*.hpkg
+make plugin-publish ID=hestia-hello VERSION=v0.3.0  # тег plugin/hestia-hello/v0.3.0, каталог plugins-catalog
 ```
 
 `make plugin` подписывает ключом `~/.config/hestia/plugins.key` (`PLUGIN_KEY=…` — другой) и сверяет
