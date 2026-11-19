@@ -55,6 +55,22 @@ type Linker interface {
 	LinkRefresh(ctx context.Context, req LinkRequest) (json.RawMessage, error)
 }
 
+// Preparer is implemented by consumers of link types with a request
+// (tls.cert): link.prepare returns the request (for tls.cert — a new key is
+// generated and kept by the plugin, the CSR goes to the provider). A
+// consumer of such a type must also put the preview of the request into
+// its link.plan (Plan.Request).
+type Preparer interface {
+	LinkPrepare(ctx context.Context, req LinkRequest) (json.RawMessage, error)
+}
+
+// Actioner is implemented by plugins with "actions" in the manifest.
+type Actioner interface {
+	// Action runs one action. job is the short plugin-action job (steps and
+	// log are optional). Params are never stored by Hestia.
+	Action(ctx context.Context, req ActionRequest, job *Job) (ActionResult, error)
+}
+
 // Environment of a plugin process.
 const (
 	// EnvSocket is the unix socket of Hestia (production, systemd unit).
@@ -252,6 +268,42 @@ func (s *server) handle(ctx context.Context, method string, params json.RawMessa
 			st.Endpoints = []Endpoint{}
 		}
 		return st, nil
+	case MethodLinkPrepare:
+		pr, ok := s.p.(Preparer)
+		if !ok {
+			return nil, rpc.Errorf(rpc.CodeMethodNotFound, "плагин не умеет запрашивать сертификаты (link.prepare)")
+		}
+		var req LinkRequest
+		if err := decode(params, &req); err != nil {
+			return nil, err
+		}
+		if req.Config == nil {
+			req.Config = Config{}
+		}
+		r, err := pr.LinkPrepare(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		return LinkPrepared{Request: r}, nil
+	case MethodAction:
+		ac, ok := s.p.(Actioner)
+		if !ok {
+			return nil, rpc.Errorf(rpc.CodeMethodNotFound, "у плагина нет действий")
+		}
+		var req ActionRequest
+		if err := decode(params, &req); err != nil {
+			return nil, err
+		}
+		if req.Params == nil {
+			req.Params = Config{}
+		}
+		job := &Job{ID: req.JobID, host: s.host, ctx: ctx}
+		res, err := ac.Action(ctx, req, job)
+		job.closeOpen(err)
+		if err != nil {
+			return nil, err
+		}
+		return res, nil
 	case MethodLinkPlan, MethodLinkApply, MethodLinkRemove, MethodLinkStatus, MethodLinkRefresh:
 		l, ok := s.p.(Linker)
 		if !ok {

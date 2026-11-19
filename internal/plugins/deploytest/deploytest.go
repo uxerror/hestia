@@ -59,6 +59,40 @@ exit 2
 
 const dockerBin = `#!/bin/sh
 echo "docker $*" >> "$FAKE/docker.log"
+# Images: $FAKE/images.list has "<ref> <hestia.sha256 label>" lines.
+case "$1" in
+image)
+  case "$2" in
+  inspect)
+    for a; do ref=$a; done
+    [ -f "$FAKE/images.list" ] || exit 1
+    while read -r r l; do [ "$r" = "$ref" ] && { echo "$l"; exit 0; }; done < "$FAKE/images.list"
+    exit 1;;
+  ls)
+    [ -f "$FAKE/images.list" ] && while read -r r l; do echo "$r"; done < "$FAKE/images.list"
+    exit 0;;
+  rm)
+    shift 2
+    for r; do
+      echo "$r" >> "$FAKE/image-rm.log"
+      : > "$FAKE/images.new"
+      [ -f "$FAKE/images.list" ] && while read -r x l; do [ "$x" = "$r" ] || echo "$x $l" >> "$FAKE/images.new"; done < "$FAKE/images.list"
+      mv "$FAKE/images.new" "$FAKE/images.list"
+    done
+    exit 0;;
+  esac;;
+import)
+  sha=
+  for a; do ref=$a; case "$a" in "LABEL hestia.sha256="*) sha=${a#LABEL hestia.sha256=}; sha=${sha%% *};; esac; done
+  cat > "$FAKE/import.tgz"
+  echo "$*" >> "$FAKE/import.log"
+  echo "$ref $sha" >> "$FAKE/images.list"
+  echo "sha256:fake"
+  exit 0;;
+ps)
+  cat "$FAKE/ps-plugin" 2>/dev/null
+  exit 0;;
+esac
 [ "$1" = compose ] || { echo "fake docker: $*" >&2; exit 1; }
 shift
 proj=

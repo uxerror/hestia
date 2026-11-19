@@ -32,6 +32,9 @@ var (
 type hello struct {
 	// HTTP is used for the checks (tests replace it).
 	HTTP *http.Client
+	// StateDir keeps the keys and certificates of "tls" links
+	// ($STATE_DIRECTORY, 0700; tests use a temporary one).
+	StateDir string
 }
 
 func (h *hello) client() *http.Client {
@@ -49,18 +52,28 @@ type planData struct {
 }
 
 // compose is the compose file of the instance (JSON: Hestia accepts compose
-// as a JSON object).
-func compose(port int64, msg string) json.RawMessage {
-	b, _ := json.Marshal(map[string]any{
-		"services": map[string]any{
-			"whoami": map[string]any{
-				"image":   image,
-				"command": []string{"--name", msg},
-				"ports":   []string{fmt.Sprintf("%d:80", port)},
-				"restart": "unless-stopped",
-			},
+// as a JSON object). With tlsPort the second service whoami-tls answers
+// HTTPS with the certificate and key from the project files.
+func compose(port int64, msg string, tlsPort ...int64) json.RawMessage {
+	services := map[string]any{
+		"whoami": map[string]any{
+			"image":   image,
+			"command": []string{"--name", msg},
+			"ports":   []string{fmt.Sprintf("%d:80", port)},
+			"restart": "unless-stopped",
 		},
-	})
+	}
+	if len(tlsPort) > 0 {
+		services["whoami-tls"] = map[string]any{
+			"image":   image,
+			"command": []string{"--name", msg, "--port", "8443", "--cert", "/tls/cert.pem", "--key", "/tls/key.pem"},
+			"ports":   []string{fmt.Sprintf("%d:8443", tlsPort[0])},
+			// The files are 0640 root on the target; the image runs as root.
+			"volumes": []string{"./" + fileTLSCert + ":/tls/cert.pem:ro", "./" + fileTLSKey + ":/tls/key.pem:ro"},
+			"restart": "unless-stopped",
+		}
+	}
+	b, _ := json.Marshal(map[string]any{"services": services})
 	return b
 }
 
@@ -145,7 +158,8 @@ func (h *hello) Plan(ctx context.Context, req sdk.PlanRequest) (sdk.Plan, error)
 	if err != nil {
 		return pl, err
 	}
-	dp, err := host.DeployPlan(ctx, sdk.DeployRequest{Instance: inst, Target: tgt, Project: project, Compose: compose(port(req.Config), req.Config.String("message"))})
+	dreq := h.deployRequest(inst, tgt, req.Config, "")
+	dp, err := host.DeployPlan(ctx, dreq)
 	if err != nil {
 		return pl, err
 	}
@@ -181,8 +195,7 @@ func (h *hello) Apply(ctx context.Context, req sdk.ApplyRequest, job *sdk.Job) e
 			return nil
 		}
 	}
-	st, err := host.DeployUp(ctx, sdk.DeployRequest{JobID: job.ID, Instance: inst, Target: d.Target, Project: project,
-		Compose: compose(port(req.Config), req.Config.String("message"))})
+	st, err := host.DeployUp(ctx, h.deployRequest(inst, d.Target, req.Config, job.ID))
 	if err != nil {
 		return err
 	}

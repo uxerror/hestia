@@ -14,6 +14,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
+	"sort"
 	"strings"
 
 	"github.com/uxerror/hestia/internal/selfinstall"
@@ -71,9 +73,11 @@ type Package struct {
 	Binary      []byte
 	Icon        []byte // sanitised, may be nil
 	Readme      string
-	Size        int64  // size of the .hpkg file
-	SHA256      string // of the .hpkg file
-	Official    bool
+	// Images are the container image binaries (name → bytes, "image-<name>").
+	Images   map[string][]byte
+	Size     int64  // size of the .hpkg file
+	SHA256   string // of the .hpkg file
+	Official bool
 }
 
 // PackageError is a rejected package (the message is for the user).
@@ -156,7 +160,25 @@ func ReadPackage(data []byte, hestiaVersion string) (*Package, error) {
 	}
 	p := &Package{
 		Manifest: m, ManifestRaw: files[FileManifest], Binary: files[FilePlugin],
-		Readme: string(files[FileReadme]), Size: int64(len(data)), Official: official,
+		Readme: string(files[FileReadme]), Size: int64(len(data)), Official: official, Images: map[string][]byte{},
+	}
+	for name, b := range files {
+		if !isImageFile(name) {
+			continue
+		}
+		img := strings.TrimPrefix(name, imagePrefix)
+		if !slices.ContainsFunc(m.Images, func(im sdk.Image) bool { return im.Name == img }) {
+			return nil, pkgErr("лишний файл в пакете: %q (образа %s нет в images манифеста)", name, img)
+		}
+		if err := selfinstall.ValidateServerBinary(b); err != nil {
+			return nil, pkgErr("образ %s: %v", img, err)
+		}
+		p.Images[img] = b
+	}
+	for _, im := range m.Images {
+		if _, ok := p.Images[im.Name]; !ok {
+			return nil, pkgErr("в пакете нет %s (образ %s из манифеста)", im.File, im.Name)
+		}
 	}
 	if len(p.Readme) > MaxReadme {
 		return nil, pkgErr("README.md больше 256 КБ")
@@ -209,8 +231,13 @@ func untar(data []byte) (map[string][]byte, error) {
 		case h.Typeflag != tar.TypeReg:
 			return nil, pkgErr("в пакете допустимы только обычные файлы: %q", name)
 		}
-		if _, known := contentFiles[name]; !known && name != FileSums && name != FileSig {
+		_, known := contentFiles[name]
+		image := isImageFile(name)
+		if !known && !image && name != FileSums && name != FileSig {
 			return nil, pkgErr("лишний файл в пакете: %q", name)
+		}
+		if image && h.Size > MaxImage {
+			return nil, pkgErr("%s больше 32 МБ", name)
 		}
 		if _, dup := files[name]; dup {
 			return nil, pkgErr("файл %q в пакете дважды", name)
@@ -248,12 +275,20 @@ func Pack(priv ed25519.PrivateKey, files map[string][]byte) ([]byte, error) {
 		return nil, fmt.Errorf("author.key в manifest.json не совпадает с ключом подписи (%s): впишите ключ и пересоберите плагин — манифест вшит в бинарник", update.EncodePublicKey(pub))
 	}
 	content := map[string][]byte{}
+	var images []string
 	for name, b := range files {
 		if _, ok := contentFiles[name]; !ok {
-			return nil, fmt.Errorf("лишний файл %q", name)
+			if !isImageFile(name) {
+				return nil, fmt.Errorf("лишний файл %q", name)
+			}
+			if len(b) > MaxImage {
+				return nil, fmt.Errorf("%s больше 32 МБ", name)
+			}
+			images = append(images, name)
 		}
 		content[name] = b
 	}
+	sort.Strings(images)
 	if _, ok := content[FilePlugin]; !ok {
 		return nil, errors.New("нет исполняемого файла plugin")
 	}
@@ -265,13 +300,14 @@ func Pack(priv ed25519.PrivateKey, files map[string][]byte) ([]byte, error) {
 	var buf bytes.Buffer
 	gz := gzip.NewWriter(&buf)
 	tw := tar.NewWriter(gz)
-	for _, name := range []string{FileManifest, FilePlugin, FileIcon, FileReadme, FileSums, FileSig} {
+	order := append([]string{FileManifest, FilePlugin}, images...)
+	for _, name := range append(order, FileIcon, FileReadme, FileSums, FileSig) {
 		b, ok := all[name]
 		if !ok {
 			continue
 		}
 		mode := int64(0o644)
-		if name == FilePlugin {
+		if name == FilePlugin || isImageFile(name) {
 			mode = 0o755
 		}
 		if err := tw.WriteHeader(&tar.Header{Name: name, Mode: mode, Size: int64(len(b)), Typeflag: tar.TypeReg}); err != nil {
@@ -290,8 +326,9 @@ func Pack(priv ed25519.PrivateKey, files map[string][]byte) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// PackDir packs a plugin directory: `plugin` from dir; manifest.json,
-// icon.svg and README.md from src (default dir).
+// PackDir packs a plugin directory: `plugin` and the images of the
+// manifest ("image-<name>") from dir; manifest.json, icon.svg and README.md
+// from src (default dir).
 func PackDir(priv ed25519.PrivateKey, dir, src string) ([]byte, sdk.Manifest, error) {
 	if src == "" {
 		src = dir
@@ -323,6 +360,11 @@ func PackDir(priv ed25519.PrivateKey, dir, src string) ([]byte, sdk.Manifest, er
 	m, err := ParseManifest(files[FileManifest])
 	if err != nil {
 		return nil, m, err
+	}
+	for _, im := range m.Images {
+		if err := read(dir, im.File, true); err != nil {
+			return nil, m, fmt.Errorf("образ %s: %w", im.Name, err)
+		}
 	}
 	b, err := Pack(priv, files)
 	return b, m, err

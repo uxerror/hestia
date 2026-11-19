@@ -1,0 +1,44 @@
+{
+  "protocol": 1,
+  "id": "hestia-ca",
+  "name": "HestiaCA",
+  "version": "v0.1.0",
+  "description": "Свой корневой CA Hestia: сертификаты сервисам по CSR (ключ не покидает сервис), HTTPS для самой Hestia, доверие к корню на устройствах",
+  "homepage": "https://github.com/uxerror/hestia",
+  "author": {"name": "uxerror", "key": "v/i7jzbuZQGgOed7Q04PAQy3kj8U1gODTDdZdx2IXbo="},
+  "min_hestia": "v0.4.0",
+  "permissions": ["targets.read", "targets.exec", "deploy.docker", "net.outbound", "links.client"],
+  "multi_instance": false,
+  "images": [{"name": "ca-server", "file": "image-ca-server"}],
+  "provides": [
+    {"name": "tls", "type": "tls.cert", "label": "Сертификаты", "multi": true},
+    {"name": "trust", "type": "ca.issuer", "label": "Доверие к CA", "multi": true, "client": true}
+  ],
+  "requires": [],
+  "actions": [
+    {"name": "root", "label": "Скачать корневой сертификат"},
+    {"name": "backup", "label": "Резервная копия ключа CA…", "confirm": "password",
+     "fields": [{"name": "passphrase", "type": "secret", "label": "Пароль для файла", "required": true, "min_len": 12}]},
+    {"name": "restore", "label": "Восстановить из резервной копии…", "confirm": "password",
+     "fields": [{"name": "backup", "type": "text", "label": "Содержимое файла", "required": true, "max_len": 65536},
+                {"name": "passphrase", "type": "secret", "label": "Пароль файла", "required": true}]}
+  ],
+  "schema": {
+    "fields": [
+      {"name": "target", "type": "target", "label": "Где запустить CA", "required": true, "filter": {"docker_capable": true},
+       "help": "Сервер или контейнер с Docker. Ключ CA будет храниться только там (том ca-data)."},
+      {"name": "port", "type": "int", "label": "Порт API CA", "default": 9443, "min": 1024, "max": 65535},
+      {"name": "zones", "type": "string", "label": "DNS-зоны", "default": "home,home.arpa", "pattern": "^[a-z0-9.-]+(,[a-z0-9.-]+)*$",
+       "help": "Через запятую. Зашиваются в корневой сертификат: CA сможет выпускать только имена в этих зонах. Изменить потом нельзя."},
+      {"name": "ip_ranges", "type": "string", "label": "Диапазоны IP", "advanced": true,
+       "default": "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fd00::/8"},
+      {"name": "init", "type": "enum", "label": "Ключ CA", "default": "new",
+       "options": [{"value": "new", "label": "Создать новый"}, {"value": "restore", "label": "Восстановить из резервной копии"}]},
+      {"name": "leaf_days", "type": "int", "label": "Срок сертификатов, дней", "default": 90, "min": 30, "max": 180},
+      {"name": "root_years", "type": "int", "label": "Срок корневого сертификата, лет", "default": 10, "min": 1, "max": 20, "advanced": true},
+      {"name": "test_lifetime_min", "type": "int", "label": "Тестовый срок сертификатов, минут (0 — выключен)",
+       "default": 0, "min": 0, "max": 1440, "advanced": true,
+       "help": "Только для проверки продления. Все сертификаты будут жить столько минут."}
+    ]
+  }
+}

@@ -5,6 +5,8 @@ package main
 
 import (
 	_ "embed"
+	"os"
+	"path/filepath"
 
 	"github.com/uxerror/hestia/sdk"
 )
@@ -12,4 +14,11 @@ import (
 //go:embed manifest.json
 var manifest []byte
 
-func main() { sdk.Serve(manifest, &hello{}) }
+func main() {
+	h := &hello{StateDir: os.Getenv("STATE_DIRECTORY")}
+	if h.StateDir == "" && os.Getenv(sdk.EnvSocket) == "" {
+		// dev mode (a child of `hestia serve --plugin-dev`)
+		h.StateDir = filepath.Join(os.TempDir(), "hestia-hello-dev")
+	}
+	sdk.Serve(manifest, h)
+}

@@ -20,6 +20,14 @@
   - `link.refresh` после изменения экземпляра (другой порт или цель) — новый binding; Hestia сама
     применит его у потребителя и на устройстве.
 
+- Требует (необязательно) порт `tls` (`tls.cert`, «HTTPS») — демо выпуска сертификата по CSR
+  (v0.4.0): в плане связи — предпросмотр `{ips: [<IP цели>], dns: [tls_name?]}`; `link.prepare`
+  создаёт ключ ECDSA P-256 в `$STATE_DIRECTORY/tls-<связь>.key.pending` (0600) и отдаёт CSR;
+  `link.apply` поднимает второй сервис `whoami-tls` на `tls_port` (8443) с `--cert/--key` из файлов
+  проекта (0640 root) — ключ переносится в `tls-<связь>.key` только после успешного `deploy.up`;
+  `link.remove` возвращает compose без `whoami-tls` и удаляет ключи. Поля `tls_port`, `tls_name` —
+  в «Дополнительно».
+
 ## Как устроен
 
 - `manifest.json` — манифест; вшит в бинарник (`//go:embed`) и кладётся в пакет.
@@ -77,8 +85,8 @@ go run ./cmd/hestia serve --listen 127.0.0.1:8080 --data /tmp/hestia-dev --plugi
 ## Официальная сборка (для сопровождающего)
 
 ```sh
-make plugin ID=hestia-hello VERSION=v0.3.0          # build/plugins/hestia-hello/plugin + dist/plugins/*.hpkg
-make plugin-publish ID=hestia-hello VERSION=v0.3.0  # тег plugin/hestia-hello/v0.3.0, каталог plugins-catalog
+make plugin ID=hestia-hello VERSION=v0.4.0          # build/plugins/hestia-hello/plugin + dist/plugins/*.hpkg
+make plugin-publish ID=hestia-hello VERSION=v0.4.0  # тег plugin/hestia-hello/v0.4.0, каталог plugins-catalog
 ```
 
 `make plugin` подписывает ключом `~/.config/hestia/plugins.key` (`PLUGIN_KEY=…` — другой) и сверяет

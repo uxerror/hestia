@@ -86,6 +86,7 @@ type deploySpec struct {
 	compose  *preparedCompose
 	files    map[string][]byte // compose.yaml included
 	names    []string          // sorted
+	images   []deployImage     // package images of the call
 }
 
 func projectName(instance int64, project string) string {
@@ -110,7 +111,11 @@ func (m *Manager) newSpec(pid string, instance int64, refStr, project string) (*
 
 // withContent checks the compose file and the extra files.
 func (sp *deploySpec) withContent(compose json.RawMessage, files []sdk.DeployFile) error {
-	pc, err := prepareCompose(compose, sp.dir, sp.pluginID, sp.instance)
+	refs := make([]string, 0, len(sp.images))
+	for _, im := range sp.images {
+		refs = append(refs, im.ref)
+	}
+	pc, err := prepareCompose(compose, sp.dir, sp.pluginID, sp.instance, refs...)
 	if err != nil {
 		return err
 	}
@@ -167,6 +172,9 @@ func (m *Manager) deployCall(ctx context.Context, s *session, method string, par
 		}
 		sp, err := m.newSpec(pid, p.Instance, p.Target, p.Project)
 		if err != nil {
+			return nil, err
+		}
+		if sp.images, err = m.specImages(ctx, pid, p.Images); err != nil {
 			return nil, err
 		}
 		if err := sp.withContent(p.Compose, p.Files); err != nil {
@@ -267,7 +275,7 @@ func (m *Manager) applyFor(pid, jobID string, iid int64) (*applyJob, error) {
 	m.mu.Lock()
 	a := m.applying[jobID]
 	m.mu.Unlock()
-	if a == nil || a.pluginID != pid || a.instanceID != iid {
+	if a == nil || a.pluginID != pid || a.instanceID != iid || a.action {
 		return nil, denied(fmt.Sprintf("задача %q не выполняется для экземпляра %d", jobID, iid),
 			map[string]any{"job_id": jobID, "instance": iid})
 	}
@@ -323,6 +331,7 @@ type probe struct {
 	listen               map[int]bool
 	ps                   []sdk.DeployContainer
 	lxc                  *lxcState
+	images               map[string]string // image ref → its hestia.sha256 label
 }
 
 type lxcState struct {
@@ -357,8 +366,8 @@ func (p *probe) installPkgs() string {
 // anything but a plain file name is skipped. Globbing is off (set -f).
 const safeName = `case "$f" in ""|.|..|*/*|*[!A-Za-z0-9._-]*) continue;; esac;`
 
-func probeScript(dir, project string) string {
-	return fmt.Sprintf(`set -f; P=%s; N=%s; v=
+func probeScript(dir, project string, imgs []deployImage) string {
+	return probeImages(imgs) + fmt.Sprintf(`set -f; P=%s; N=%s; v=
 if [ -r /etc/os-release ]; then . /etc/os-release; fi
 echo "os_id=${ID:-}"; echo "os_like=${ID_LIKE:-}"; echo "os_name=${PRETTY_NAME:-}"
 command -v apt-get >/dev/null 2>&1 && echo apt=1
@@ -373,7 +382,7 @@ if [ -n "$v" ]; then docker compose -p "$N" ps -a --format json 2>/dev/null || t
 }
 
 func (m *Manager) probe(ctx context.Context, sp *deploySpec) (*probe, error) {
-	res, err := m.texec(ctx, sp.refStr, probeScript(sp.dir, sp.project), nil, m.DeployProbeTimeout)
+	res, err := m.texec(ctx, sp.refStr, probeScript(sp.dir, sp.project, sp.images), nil, m.DeployProbeTimeout)
 	if err != nil {
 		return nil, fmt.Errorf("проверка цели: %w", err)
 	}
@@ -387,7 +396,7 @@ func (m *Manager) probe(ctx context.Context, sp *deploySpec) (*probe, error) {
 }
 
 func parseProbe(out string) *probe {
-	p := &probe{files: map[string]fileState{}, listen: map[int]bool{}}
+	p := &probe{files: map[string]fileState{}, listen: map[int]bool{}, images: map[string]string{}}
 	section := ""
 	var ps strings.Builder
 	for _, line := range strings.Split(out, "\n") {
@@ -404,6 +413,12 @@ func parseProbe(out string) *probe {
 			continue
 		case "---ps":
 			ps.WriteString(line + "\n")
+			continue
+		}
+		if rest, ok := strings.CutPrefix(line, "image "); ok {
+			if ref, label, _ := strings.Cut(rest, " "); ref != "" {
+				p.images[ref] = strings.TrimSpace(label)
+			}
 			continue
 		}
 		if rest, ok := strings.CutPrefix(line, "file "); ok {
@@ -635,6 +650,17 @@ func planFrom(sp *deploySpec, p *probe) (sdk.DeployPlan, error) {
 		pl.Actions = append(pl.Actions, sdk.Action{Title: title, Detail: "Debian/Ubuntu, пакеты дистрибутива", Risk: sdk.RiskChange})
 	}
 
+	for _, im := range sp.images {
+		if p.imageLoaded(im) {
+			pl.Actions = append(pl.Actions, sdk.Action{Title: fmt.Sprintf("Образ %s уже загружен", im.name), Detail: im.ref, Risk: sdk.RiskInfo})
+			continue
+		}
+		pl.Actions = append(pl.Actions, sdk.Action{
+			Title:  fmt.Sprintf("Загрузить образ %s из пакета плагина (%s, sha256 %s…)", im.name, mbText(int64(len(im.data))), im.sha[:12]),
+			Detail: "docker import " + im.ref + " (без сети: образ собирается Hestia из подписанного пакета)",
+			Risk:   sdk.RiskChange,
+		})
+	}
 	var details []string
 	for _, n := range sp.names {
 		data := sp.files[n]
@@ -787,6 +813,9 @@ func (m *Manager) deployUp(ctx context.Context, a *applyJob, sp *deploySpec) (sd
 	}); err != nil {
 		return fail(err)
 	}
+	if err := m.loadImages(ctx, a, sp, p); err != nil {
+		return fail(err)
+	}
 	if err := m.jobStep(a, "docker compose up -d", func() error {
 		res, err := m.texec(ctx, sp.refStr, m.composeCmd(sp, "up -d --remove-orphans 2>&1"), nil, m.DeployUpTimeout)
 		m.logOutput(a, res.Stdout)
@@ -803,6 +832,13 @@ func (m *Manager) deployUp(ctx context.Context, a *applyJob, sp *deploySpec) (sd
 	}
 	if backedUp {
 		_, _ = m.texec(ctx, sp.refStr, "rm -rf "+target.Quote(sp.dir+"/"+prevDir), nil, deployFileT)
+	}
+	if len(sp.images) > 0 {
+		keep := map[string]bool{}
+		for _, im := range sp.images {
+			keep[im.ref] = true
+		}
+		m.removeImages(ctx, a, sp.refStr, sp.pluginID, keep)
 	}
 	return st, nil
 }
@@ -1005,10 +1041,14 @@ if [ -f %s/%s ]; then cd %s && docker compose -p %s -f %s down %s 2>&1; else doc
 	}); err != nil {
 		return err
 	}
-	return m.jobStep(a, "Удаление "+sp.dir, func() error {
+	if err := m.jobStep(a, "Удаление "+sp.dir, func() error {
 		_, err := m.texec(ctx, sp.refStr, "rm -rf "+d, nil, deployFileT)
 		return err
-	})
+	}); err != nil {
+		return err
+	}
+	m.cleanupAfterDown(ctx, a, sp)
+	return nil
 }
 
 func (m *Manager) deployStatus(ctx context.Context, sp *deploySpec) (sdk.DeployStatus, error) {

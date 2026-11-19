@@ -212,6 +212,10 @@ func (m *Manager) registerDev(s *session, h sdk.Hello) {
 		fail("id или версия в hello не совпадают с манифестом")
 		return
 	}
+	if man.ID == BuiltinID {
+		fail("id " + BuiltinID + " зарезервирован за Hestia")
+		return
+	}
 	cur, err := m.Store.GetPlugin(ctx, man.ID)
 	switch {
 	case err == nil && cur.Source != store.PluginSourceDev:

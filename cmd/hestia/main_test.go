@@ -20,7 +20,7 @@ func TestMovedModeDoesNotOpenDatabase(t *testing.T) {
 		Location: selfinstall.Location{Kind: "lxc", IP: "198.51.100.7"}}); err != nil {
 		t.Fatal(err)
 	}
-	a, err := newApp(context.Background(), dir, "serve", nil, "http://127.0.0.1:1")
+	a, err := newApp(context.Background(), dir, "serve", nil, "http://127.0.0.1:1", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +53,7 @@ func TestMovedModeDoesNotOpenDatabase(t *testing.T) {
 
 func TestNormalStartCreatesInstanceID(t *testing.T) {
 	dir := t.TempDir()
-	a, err := newApp(context.Background(), dir, "serve", nil, "http://127.0.0.1:1")
+	a, err := newApp(context.Background(), dir, "serve", nil, "http://127.0.0.1:1", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,5 +98,29 @@ func TestHealthcheckCommand(t *testing.T) {
 		if got := run(append([]string{"healthcheck"}, c.args...)); got != c.want {
 			t.Errorf("%v: exit %d, want %d", c.args, got, c.want)
 		}
+	}
+}
+
+// `hestia tls` reads only files; reset refuses other users than root and
+// hestia (the test does not run as either).
+func TestTLSCommands(t *testing.T) {
+	dir := t.TempDir()
+	if code := run([]string{"tls", "status", "--data", dir}); code != 0 {
+		t.Fatalf("status = %d", code)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "hestia.db")); err == nil {
+		t.Fatal("status opened the database")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("running as root")
+	}
+	if code := run([]string{"tls", "reset", "--data", dir}); code != 1 {
+		t.Fatalf("reset by a regular user = %d", code)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "tls-reset")); err == nil {
+		t.Fatal("marker written")
+	}
+	if code := run([]string{"tls", "bogus"}); code != 2 {
+		t.Fatalf("bogus = %d", code)
 	}
 }

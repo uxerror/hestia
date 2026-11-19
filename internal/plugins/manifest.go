@@ -24,7 +24,17 @@ var (
 	rePortType  = regexp.MustCompile(`^[a-z][a-z0-9.-]+$`)
 	reFieldName = regexp.MustCompile(`^[a-z][a-z0-9_]{0,39}$`)
 	rePortName  = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
+	reImageName = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
 )
+
+// Limits of the manifest's images and actions.
+const (
+	maxImages  = 8
+	maxActions = 16
+)
+
+// actionFieldTypes are the field types allowed in an action's form.
+var actionFieldTypes = []string{sdk.FieldString, sdk.FieldText, sdk.FieldSecret, sdk.FieldBool, sdk.FieldEnum}
 
 // Permissions is the closed list of protocol v1.
 var Permissions = []string{sdk.PermTargetsRead, sdk.PermTargetsExec, sdk.PermDeployDocker, sdk.PermInventoryRead,
@@ -32,7 +42,7 @@ var Permissions = []string{sdk.PermTargetsRead, sdk.PermTargetsExec, sdk.PermDep
 
 // reservedIDs collide with API paths under /api/v1/plugins/ or with the
 // prefixes of official link types.
-var reservedIDs = append([]string{"authors", "catalog", "compose", "install", "instances", "links", "packages", "plans", "targets"},
+var reservedIDs = append([]string{"hestia", "authors", "catalog", "compose", "install", "instances", "links", "packages", "plans", "targets"},
 	types.Prefixes()...)
 
 var fieldTypes = []string{sdk.FieldString, sdk.FieldText, sdk.FieldInt, sdk.FieldBool, sdk.FieldEnum, sdk.FieldSecret, sdk.FieldTarget}
@@ -121,7 +131,74 @@ func ValidateManifest(m sdk.Manifest) error {
 	if err := validatePorts(m, false); err != nil {
 		return err
 	}
+	if err := validateImages(m); err != nil {
+		return err
+	}
+	if err := validateActions(m.Actions); err != nil {
+		return err
+	}
 	return validateSchema(m.Schema, false)
+}
+
+// validateImages checks the images shipped in the package: names, the file
+// name "image-<name>" and the deploy.docker permission.
+func validateImages(m sdk.Manifest) error {
+	if len(m.Images) == 0 {
+		return nil
+	}
+	if len(m.Images) > maxImages {
+		return pkgErr("в images больше %d образов", maxImages)
+	}
+	if !slices.Contains(m.Permissions, sdk.PermDeployDocker) {
+		return pkgErr("образы (images) требуют права %s", sdk.PermDeployDocker)
+	}
+	seen := map[string]bool{}
+	for _, im := range m.Images {
+		if !reImageName.MatchString(im.Name) {
+			return pkgErr("неверное имя образа %q: строчные латинские буквы, цифры и дефис, до 32 символов", im.Name)
+		}
+		if seen[im.Name] {
+			return pkgErr("образ %q указан дважды", im.Name)
+		}
+		seen[im.Name] = true
+		if im.File != imageFileName(im.Name) {
+			return pkgErr("образ %s: file должен быть %q", im.Name, imageFileName(im.Name))
+		}
+	}
+	return nil
+}
+
+// validateActions checks the actions of an instance: names, labels, the
+// confirmation and their forms (a subset of the field types, no presets).
+func validateActions(list []sdk.ActionDef) error {
+	if len(list) > maxActions {
+		return pkgErr("в actions больше %d действий", maxActions)
+	}
+	seen := map[string]bool{}
+	for _, a := range list {
+		if !reFieldName.MatchString(a.Name) {
+			return pkgErr("неверное имя действия %q", a.Name)
+		}
+		if seen[a.Name] {
+			return pkgErr("действие %q указано дважды", a.Name)
+		}
+		seen[a.Name] = true
+		if strings.TrimSpace(a.Label) == "" || len(a.Label) > 100 || strings.ContainsAny(a.Label, "\n\r") {
+			return pkgErr("действие %s: label — одна непустая строка до 100 символов", a.Name)
+		}
+		if a.Confirm != "" && a.Confirm != sdk.ConfirmPassword {
+			return pkgErr("действие %s: confirm может быть только %q", a.Name, sdk.ConfirmPassword)
+		}
+		for _, f := range a.Fields {
+			if !slices.Contains(actionFieldTypes, f.Type) {
+				return pkgErr("действие %s, поле %s: тип %q недопустим в действии", a.Name, f.Name, f.Type)
+			}
+		}
+		if err := validateSchema(sdk.Schema{Fields: a.Fields}, false); err != nil {
+			return pkgErr("действие %s: %v", a.Name, err)
+		}
+	}
+	return nil
 }
 
 // validatePorts checks provides (or requires): names, types (official or
@@ -222,6 +299,15 @@ func validateSchema(s sdk.Schema, link bool) error {
 				return pkgErr("поле %s: неверный pattern", f.Name)
 			}
 		}
+		if f.MinLen < 0 || f.MaxLen < 0 {
+			return pkgErr("поле %s: min_len и max_len не могут быть отрицательными", f.Name)
+		}
+		if f.MinLen > 0 && f.Type != sdk.FieldString && f.Type != sdk.FieldText && f.Type != sdk.FieldSecret {
+			return pkgErr("поле %s: min_len допустим только для строк и секретов", f.Name)
+		}
+		if f.MaxLen > 0 && f.MinLen > f.MaxLen {
+			return pkgErr("поле %s: min_len больше max_len", f.Name)
+		}
 		if f.Min != nil && f.Max != nil && *f.Min > *f.Max {
 			return pkgErr("поле %s: min больше max", f.Name)
 		}
@@ -281,6 +367,9 @@ func checkValue(f sdk.Field, v any) string {
 		}
 		if f.MaxLen > 0 && len([]rune(s)) > f.MaxLen {
 			return fmt.Sprintf("не длиннее %d символов", f.MaxLen)
+		}
+		if f.MinLen > 0 && s != "" && len([]rune(s)) < f.MinLen {
+			return fmt.Sprintf("не короче %d символов", f.MinLen)
 		}
 		if f.Type == sdk.FieldString && strings.ContainsAny(s, "\n\r") {
 			return "одна строка"

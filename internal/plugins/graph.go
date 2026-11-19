@@ -50,6 +50,7 @@ type GraphInstance struct {
 	HostRef    string           `json:"host_ref"`
 	HostIP     string           `json:"host_ip"`
 	Controller bool             `json:"controller"` // no target: runs on the controller
+	Builtin    bool             `json:"builtin"`    // the pseudo plugin of the controller itself
 	Provides   []GraphPort      `json:"provides"`
 	Requires   []GraphPort      `json:"requires"`
 	Containers []GraphContainer `json:"containers"`
@@ -97,6 +98,11 @@ type LinkView struct {
 	Detail    string          `json:"detail"`
 	CreatedAt time.Time       `json:"created_at"`
 	CheckedAt *time.Time      `json:"checked_at"`
+	// Request (names; the CSR is not shown) and renewal of renewable types.
+	Request    json.RawMessage `json:"request,omitempty"`
+	ExpiresAt  *time.Time      `json:"expires_at"`
+	RenewAfter *time.Time      `json:"renew_after"`
+	RenewError string          `json:"renew_error"`
 }
 
 // Graph is GET /graph.
@@ -197,7 +203,8 @@ func (ix *graphIndex) linkView(l store.PluginLink) LinkView {
 	prov := ix.insts[l.ProviderInstance]
 	v := LinkView{ID: l.ID, Kind: l.Kind, Status: l.Status, Detail: l.Detail, CreatedAt: l.CreatedAt, CheckedAt: l.CheckedAt,
 		Config: json.RawMessage(nonEmptyJSON(l.Config)), Binding: json.RawMessage(nonEmptyJSON(l.Binding)),
-		Provider: LinkEndView{Instance: l.ProviderInstance, Port: l.ProviderPort, Name: ix.instName(l.ProviderInstance), PluginID: prov.PluginID}}
+		Provider: LinkEndView{Instance: l.ProviderInstance, Port: l.ProviderPort, Name: ix.instName(l.ProviderInstance), PluginID: prov.PluginID},
+		Request:  publicRequest(l.Request), ExpiresAt: l.ExpiresAt, RenewAfter: l.RenewAfter, RenewError: l.RenewError}
 	if p, ok := findPort(ix.mans[prov.PluginID].Provides, l.ProviderPort); ok {
 		v.Type = p.Type
 	}
@@ -261,7 +268,11 @@ func (m *Manager) Graph(ctx context.Context) (Graph, error) {
 	for _, in := range sortedInstances(ix.insts) {
 		man := ix.mans[in.PluginID]
 		gi := GraphInstance{ID: in.ID, PluginID: in.PluginID, PluginName: ix.names[in.PluginID], Name: in.Name, Status: in.Status,
-			Detail: in.Detail, Provides: []GraphPort{}, Requires: []GraphPort{}, Containers: []GraphContainer{}}
+			Detail: in.Detail, Provides: []GraphPort{}, Requires: []GraphPort{}, Containers: []GraphContainer{},
+			Builtin: in.PluginID == BuiltinID}
+		if gi.Builtin {
+			gi.Controller = true
+		}
 		if gi.PluginName == "" {
 			gi.PluginName = in.PluginID
 		}

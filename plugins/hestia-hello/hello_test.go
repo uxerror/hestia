@@ -97,7 +97,7 @@ func cfg(target string, port int64, msg string) sdk.Config {
 func TestManifest(t *testing.T) {
 	h, _, _ := newHost(t)
 	hl := h.Hello()
-	if hl.ID != "hestia-hello" || hl.Version != "v0.3.0" || hl.Protocol != sdk.Protocol || hl.Token != "test-token" {
+	if hl.ID != "hestia-hello" || hl.Version != "v0.4.0" || hl.Protocol != sdk.Protocol || hl.Token != "test-token" {
 		t.Fatalf("hello %+v", hl)
 	}
 	raw, err := h.Manifest(context.Background())
@@ -105,7 +105,7 @@ func TestManifest(t *testing.T) {
 		t.Fatal(err)
 	}
 	m, err := sdk.ParseManifest(raw)
-	if err != nil || m.ID != "hestia-hello" || len(m.Schema.Fields) != 3 || len(m.Provides) != 1 || m.Provides[0].Type != "http.service" ||
+	if err != nil || m.ID != "hestia-hello" || len(m.Schema.Fields) != 5 || len(m.Requires) != 1 || m.Requires[0].Type != "tls.cert" || len(m.Provides) != 1 || m.Provides[0].Type != "http.service" ||
 		m.Provides[0].PortName() != "web" || !m.Provides[0].Client || m.Provides[0].LinkSchema == nil {
 		t.Fatalf("%+v %v", m, err)
 	}

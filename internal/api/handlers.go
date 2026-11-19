@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/uxerror/hestia/internal/auth"
@@ -34,8 +36,21 @@ func (s *server) health(w http.ResponseWriter, r *http.Request) {
 	// only announced while it is verified and healthy.
 	if s.DNS != nil {
 		if u := s.DNS.PublicURL(r.Context()); u != "" {
+			// With HTTPS on and the name in the certificate the name is
+			// announced as https.
+			if s.TLS != nil && s.TLS.Active() && s.TLS.HasName(strings.TrimPrefix(u, "http://")) {
+				u = "https://" + strings.TrimPrefix(u, "http://")
+				if p := s.TLS.Port(); p != 443 {
+					u += ":" + strconv.Itoa(p)
+				}
+			}
 			h["dns_url"] = u
 		}
+	}
+	if s.TLS != nil {
+		h["tls"] = s.TLS.Health()
+	} else {
+		h["tls"] = map[string]any{"enabled": false, "port": 0, "ca_sha256": "", "expired": false}
 	}
 	writeJSON(w, http.StatusOK, h)
 }

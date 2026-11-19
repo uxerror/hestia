@@ -95,8 +95,11 @@ func (s *compStep) view(kind string) StepView {
 }
 
 func linkVerb(action string) string {
-	if action == sdk.ActionRemove {
+	switch action {
+	case sdk.ActionRemove:
 		return "Удалить"
+	case actionReissue:
+		return "Перевыпустить"
 	}
 	return "Создать"
 }
@@ -295,8 +298,8 @@ func (m *Manager) LinkPlan(ctx context.Context, req LinkPlanRequest) (*PlanView,
 // LinkChangePlan plans the removal of a link ("remove"); an orphaned link
 // loses its record only.
 func (m *Manager) LinkChangePlan(ctx context.Context, id int64, action string) (*PlanView, error) {
-	if action != sdk.ActionRemove {
-		return nil, newErr(http.StatusBadRequest, "action: remove")
+	if action != sdk.ActionRemove && action != actionReissue {
+		return nil, newErr(http.StatusBadRequest, "action: remove или reissue")
 	}
 	l, err := m.Store.GetLink(ctx, id)
 	if errors.Is(err, store.ErrNotFound) || (err == nil && l.Status == store.LinkDraft) {
@@ -307,6 +310,12 @@ func (m *Manager) LinkChangePlan(ctx context.Context, id int64, action string) (
 	}
 	if l.Status == store.LinkApplying || l.Status == store.LinkRemoving {
 		return nil, newErr(http.StatusConflict, "со связью уже выполняется задача")
+	}
+	if action == actionReissue {
+		if l.Status == store.LinkOrphaned {
+			return nil, newErr(http.StatusConflict, "связь осиротела — её можно только удалить")
+		}
+		return m.reissuePlan(ctx, l)
 	}
 	step, err := m.linkRemovalStep(ctx, l)
 	if err != nil {

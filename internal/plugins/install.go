@@ -73,6 +73,8 @@ type Preview struct {
 	Author      AuthorView  `json:"author"`
 	Update      *UpdateDiff `json:"update"`
 	Readme      string      `json:"readme"`
+	// Images is "Пакет содержит образы: …" ("" without images).
+	Images string `json:"images,omitempty"`
 }
 
 // Uploaded is the answer to a package upload.
@@ -204,6 +206,7 @@ func (m *Manager) preview(ctx context.Context, pkg *Package) (*Preview, error) {
 		Size: pkg.Size, SHA256: pkg.SHA256, Permissions: nonNil(man.Permissions), Provides: nonNilPorts(man.Provides),
 		Requires: nonNilPorts(man.Requires), Readme: pkg.Readme,
 		Author: AuthorView{Name: man.Author.Name, Key: man.Author.Key, Fingerprint: Fingerprint(man.Author.Key), Official: pkg.Official},
+		Images: imagesNote(pkg.Images),
 	}
 	switch _, err := m.Store.GetAuthor(ctx, man.Author.Key); {
 	case pkg.Official:
@@ -438,6 +441,9 @@ func (in *installer) place(ctx context.Context) error {
 	m, man, l := in.m, in.pkg.Manifest, in.sd.l
 	vdir := l.versionDir(man.ID, man.Version)
 	in.placed = true
+	if man.ID == BuiltinID {
+		return errBuiltinChange()
+	}
 	if _, err := in.sd.run(ctx, "mkdir -p "+l.q(vdir)+" && chmod 0755 "+l.q(pluginsDir)+" "+l.q(l.pluginDir(man.ID))+" "+l.q(vdir)); err != nil {
 		return err
 	}
@@ -446,6 +452,13 @@ func (in *installer) place(ctx context.Context) error {
 	}
 	if err := in.sh.PutFile(ctx, in.log, l.p(vdir+"/"+FileManifest), in.pkg.ManifestRaw, "0644", "root:root"); err != nil {
 		return err
+	}
+	// Images are read by the controller itself (deploy loads them onto a
+	// target): world-readable, root-owned, not executable here.
+	for _, im := range man.Images {
+		if err := in.sh.PutFile(ctx, in.log, l.p(vdir+"/"+im.File), in.pkg.Images[im.Name], "0644", "root:root"); err != nil {
+			return err
+		}
 	}
 	tok := l.pluginDir(man.ID) + "/token"
 	if in.prev != nil {
@@ -670,6 +683,9 @@ func (m *Manager) SetEnabled(ctx context.Context, id string, on bool) (store.Job
 	if p.Source == store.PluginSourceDev {
 		return store.Job{}, newErr(http.StatusConflict, "dev-плагин включается и выключается флагом --plugin-dev")
 	}
+	if p.Source == store.PluginSourceBuiltin {
+		return store.Job{}, errBuiltinChange()
+	}
 	loc, err := m.location(ctx)
 	if err != nil {
 		return store.Job{}, err
@@ -728,6 +744,9 @@ func (m *Manager) Remove(ctx context.Context, id string) (store.Job, error) {
 	}
 	if err != nil {
 		return store.Job{}, err
+	}
+	if p.Source == store.PluginSourceBuiltin {
+		return store.Job{}, errBuiltinChange()
 	}
 	insts, err := m.Store.ListInstances(ctx, id, false)
 	if err != nil {

@@ -20,6 +20,7 @@ import (
 	"github.com/uxerror/hestia/internal/secrets"
 	"github.com/uxerror/hestia/internal/selfinstall"
 	"github.com/uxerror/hestia/internal/store"
+	"github.com/uxerror/hestia/internal/tlsself"
 	"github.com/uxerror/hestia/internal/update"
 )
 
@@ -44,7 +45,10 @@ type Config struct {
 	// Update updates the installed controller (optional in tests).
 	Update *update.Service
 	// Plugins installs and runs plugins (optional in tests).
-	Plugins    *plugins.Manager
+	Plugins *plugins.Manager
+	// TLS is the HTTPS of the controller (optional in tests): /ca.crt, the
+	// redirect from HTTP, health.tls and /tls.
+	TLS        *tlsself.Service
 	InstanceID string
 	Web        fs.FS  // built frontend rooted at index.html
 	Mode       string // "serve" or "desktop"
@@ -139,6 +143,8 @@ func New(cfg Config) http.Handler {
 		mux.HandleFunc("POST /api/v1/plugins/links/plan", s.requireAuth(s.linkPlan))
 		mux.HandleFunc("GET /api/v1/plugins/links/{id}", s.requireAuth(s.linkGet))
 		mux.HandleFunc("POST /api/v1/plugins/links/{id}/plan", s.requireAuth(s.linkChangePlan))
+		mux.HandleFunc("POST /api/v1/plugins/links/{id}/renew", s.requireAuth(s.linkRenew))
+		mux.HandleFunc("POST /api/v1/plugins/instances/{iid}/actions/{name}", s.requireAuth(s.instanceAction))
 		mux.HandleFunc("POST /api/v1/plugins/compose/plan", s.requireAuth(s.composePlan))
 		mux.HandleFunc("DELETE /api/v1/plugins/authors/{key}", s.requireAuth(s.pluginForgetAuthor))
 		mux.HandleFunc("GET /api/v1/plugins/{id}", s.requireAuth(s.pluginGet))
@@ -150,13 +156,21 @@ func New(cfg Config) http.Handler {
 		mux.HandleFunc("POST /api/v1/plugins/plans/{plan}/apply", s.requireAuth(s.pluginApply))
 	}
 
+	if cfg.TLS != nil {
+		mux.HandleFunc("GET /api/v1/tls", s.requireAuth(s.tlsState))
+	}
+
 	// Unknown API paths must not fall through to the SPA.
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "не найдено")
 	})
 	mux.Handle("/", spaHandler(cfg.Web))
 	moved := newMovedHandler(cfg.Gate, cfg.Web, cfg.Version)
-	return recoverMiddleware(modeMiddleware(cfg.Gate, moved, mux))
+	var h http.Handler = mux
+	if cfg.TLS != nil {
+		h = cfg.TLS.Middleware(mux)
+	}
+	return recoverMiddleware(modeMiddleware(cfg.Gate, moved, h))
 }
 
 // modeMiddleware implements the two process modes: after the controller

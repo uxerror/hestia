@@ -118,6 +118,9 @@ type Manager struct {
 	HelloTimeout      time.Duration
 	HeartbeatInterval time.Duration
 	StatusInterval    time.Duration
+	// RenewInterval is how often due renewals of links are looked for
+	// (default RenewInterval).
+	RenewInterval time.Duration
 
 	// Timeouts of deploy.* (defaults in deploy.go).
 	DeployPoll           time.Duration
@@ -142,8 +145,14 @@ type Manager struct {
 	// linkCalls are link.* calls in flight (device grants act during them).
 	linkCalls map[string]linkCall
 	// instJobs are the instances an apply/link/compose job works on.
-	instJobs       map[int64]bool
+	instJobs map[int64]bool
+	// renewFails counts failed renewals in a row (link id → n) for the
+	// backoff; actionsOn are the actions enabled by the last status
+	// (instance id → names; missing: all).
+	renewFails     map[int64]int
+	actionsOn      map[int64][]string
 	linksCheckedAt time.Time
+	builtinToken   string // of the in-process pseudo plugin
 	devs           []*devPlugin
 	cacheMu        sync.Mutex // containers cache
 	ln             net.Listener
@@ -176,6 +185,9 @@ func (m *Manager) Init() *Manager {
 	}
 	if m.StatusInterval <= 0 {
 		m.StatusInterval = StatusInterval
+	}
+	if m.RenewInterval <= 0 {
+		m.RenewInterval = RenewInterval
 	}
 	if m.HTTP == nil {
 		m.HTTP = defaultHTTP()
@@ -215,6 +227,8 @@ func (m *Manager) Init() *Manager {
 	m.composites = map[string]*compositePlan{}
 	m.linkCalls = map[string]linkCall{}
 	m.instJobs = map[int64]bool{}
+	m.renewFails = map[int64]int{}
+	m.actionsOn = map[int64][]string{}
 	m.ctx, m.stop = context.WithCancel(context.Background())
 	_ = os.RemoveAll(m.uploadDir())
 	// Drafts belong to plans, which live in memory only.
@@ -234,6 +248,8 @@ func (m *Manager) Start() {
 		defer m.bg.Done()
 		t := time.NewTicker(m.StatusInterval)
 		defer t.Stop()
+		r := time.NewTicker(m.RenewInterval)
+		defer r.Stop()
 		for {
 			select {
 			case <-m.ctx.Done():
@@ -241,6 +257,8 @@ func (m *Manager) Start() {
 			case <-t.C:
 				m.refreshAll(m.ctx)
 				m.refreshLinks(m.ctx)
+			case <-r.C:
+				m.renewDue(m.ctx)
 			}
 		}
 	}()
@@ -426,6 +444,11 @@ func (m *Manager) hello(ctx context.Context, s *session, params json.RawMessage)
 	var perms []string
 	dev := false
 	switch {
+	case s.devToken != "" && m.isBuiltinToken(s.devToken):
+		// The in-process pseudo plugin (StartBuiltin): no permissions.
+		if subtle.ConstantTimeCompare([]byte(h.Token), []byte(s.devToken)) != 1 || h.ID != BuiltinID {
+			return nil, denied
+		}
 	case s.devToken != "":
 		if subtle.ConstantTimeCompare([]byte(h.Token), []byte(s.devToken)) != 1 || !reID.MatchString(h.ID) {
 			return nil, denied

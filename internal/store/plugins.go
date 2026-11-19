@@ -12,12 +12,18 @@ const (
 	PluginSourceCatalog = "catalog"
 	PluginSourceFile    = "file"
 	PluginSourceDev     = "dev"
+	// PluginSourceBuiltin is code of the controller itself (the "hestia"
+	// pseudo plugin): no process, no package, not shown among plugins.
+	PluginSourceBuiltin = "builtin"
 	// URL sources are "url:<address>".
 )
 
 // DevAuthorKey is the pseudo author of plugins started with --plugin-dev
 // (never a real base64 key, so it cannot collide with a pinned one).
 const DevAuthorKey = "dev"
+
+// BuiltinAuthorKey is the pseudo author of built-in pseudo plugins.
+const BuiltinAuthorKey = "builtin"
 
 // Instance statuses beyond the plugin's own (ok/degraded/down/unknown).
 const InstanceDraft = "draft" // created by a plan of "create", not applied yet

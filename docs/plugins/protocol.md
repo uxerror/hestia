@@ -69,12 +69,14 @@ Hestia сверяет токен (хранит только его sha256, ср�
 | `instance.validate` | `{config}` | `[{field, msg}]` — пустой массив, если всё верно |
 | `instance.plan` | `{instance, config, action}` | `{actions: [{title, detail, risk}], warnings: [...], data}` |
 | `instance.apply` | `{job_id, instance, config, action, plan}` | `{}` или ошибка |
-| `instance.status` | `{instance}` | `{state, detail, endpoints: [{name, url}]}` |
-| `link.plan` | `{link, kind, role, action, instance, port, type, peer?, device?, config}` | план своей стороны связи |
-| `link.apply` | то же + `job_id`, `plan`, `binding?` | `{binding}` (поставщик) или `{}` |
+| `instance.status` | `{instance}` | `{state, detail, endpoints: [{name, url}], actions_enabled?}` |
+| `instance.action` | `{job_id, instance, action, params}` | `{message?, download?: {name, mime, data_b64}}` |
+| `link.plan` | `{link, kind, role, action, instance, port, type, peer?, device?, config, request?, reason?}` | план своей стороны связи (+ `request` — предпросмотр запроса у потребителя типа с запросом) |
+| `link.prepare` | `{job_id, link, kind, role: "consumer", action, instance, port, type, peer, config, reason}` | `{request}` |
+| `link.apply` | то же + `job_id`, `plan`, `binding?`, `request?` | `{binding}` (поставщик) или `{}` |
 | `link.remove` | то же + `job_id`, `plan` | `{}` |
 | `link.status` | `{link, kind, role, instance, port, type, peer?, device?, config, binding?}` | `{state, detail}` |
-| `link.refresh` | `{link, kind, role, instance, port, type, …}` | `{binding}` (поставщик) |
+| `link.refresh` | `{link, kind, role, instance, port, type, …, request?, reason?}` | `{binding}` (поставщик) |
 
 - `instance` — `{id, name, config}` (текущее состояние экземпляра). У создаваемого экземпляра `id`
   уже есть: Hestia заводит черновик до первого плана.
@@ -94,6 +96,11 @@ Hestia сверяет токен (хранит только его sha256, ср�
   `link.apply`).
 - `link.*` необязательны: плагин без них отвечает `-32601`, и его порты нельзя связать («плагин не
   поддерживает связи»). В Go — интерфейс `sdk.Linker`.
+- `link.prepare` (Go — `sdk.Preparer`) нужен только потребителю типа с запросом (`tls.cert`, см.
+  «Связи с запросом»); `instance.action` (Go — `sdk.Actioner`) — плагину с `actions` в манифесте.
+  Без них — `-32601`.
+- `actions_enabled` — имена действий, доступных сейчас (нет поля / `null` — все; `[]` — ни одного);
+  недоступное действие Hestia отклоняет с 409.
 
 ### Конфигурация
 
@@ -250,8 +257,27 @@ Hestia разворачивает compose-проект плагина на вы�
 снимаются (в журнале задачи — что осталось). Ответ — как у `deploy.status`. В SDK вызов без общего
 таймаута (`Host.DeployUp`).
 
+**Образы из пакета (`images`).** `deploy.plan`/`deploy.up` принимают `images: [имя]` — только образы
+из `images` манифеста своего плагина. Hestia (не плагин) делает на цели: `docker image inspect
+hestia.local/<plugin>/<имя>:<версия плагина>` — метка `hestia.sha256` совпадает с sha256 файла —
+«образ уже загружен»; иначе собирает rootfs (`/<имя>` 0755 root, `/data/` 0700 65532:65532, `/tmp/`
+1777) и передаёт его stdin'ом через свой root-транспорт в `docker import --change 'ENTRYPOINT
+["/<имя>"]' --change 'USER 65532:65532' --change 'LABEL hestia.sha256=<sha> hestia.plugin=<id>' -
+<ссылка>` (шаг задачи «Загрузка образа …», в плане — действие «Загрузить образ … из пакета плагина
+(7,1 МБ, sha256 …)»). После успешного `up` — `docker image rm` своих образов `hestia.local/<plugin>/*`
+с другими тегами, которые не используются контейнерами (ошибки — в журнал). В compose `image` вида
+`hestia.local/…` допустим только как `hestia.local/<свой id>/<имя из images вызова>:<своя версия>`;
+`pull_policy: never` Hestia ставит сама. В Go — `sdk.ImageRef(plugin, имя, версия)`.
+
 **`deploy.down`** — `docker compose down --remove-orphans` (с `volumes: true` — ещё и `-v`, именованные
-тома проекта удаляются) и удаление каталога проекта; тоже шаги задачи.
+тома проекта удаляются) и удаление каталога проекта; тоже шаги задачи. Если это был последний
+проект плагина на цели (нет контейнеров с меткой `hestia.plugin=<id>`), удаляются и его образы
+`hestia.local/<plugin>/*`.
+
+**В какой задаче.** `deploy.up`/`deploy.down` принимают `job_id` задачи `instance.apply` этого
+экземпляра, а также задачи связи (`plugin-link`, `plugin-compose`, `link-renew`) — если экземпляр
+сторона этой связи и вызов идёт внутри `link.*` этой связи (так потребитель раскладывает
+сертификат через compose). В задаче действия (`plugin-action`) deploy запрещён.
 
 **`deploy.status`** — `{project, docker, exists, containers: [{name, service, state, status, health,
 exit_code, ports: [{url, target_port, published_port, protocol}]}]}` (по `docker compose ps -a`).
@@ -308,8 +334,29 @@ exit_code, ports: [{url, target_port, published_port, protocol}]}]}` (по `dock
    вернуть binding (тот же тип порта) — Hestia сохранит его и по нему заметит изменения.
 3. `link.remove` у поставщика, затем доступ к устройству снимается.
 
+**Связи с запросом** (тип с `request` в реестре, сейчас — `tls.cert`):
+
+1. План: сначала `link.plan` у потребителя — в ответе `request` с **предпросмотром** (у `tls.cert` —
+   `{dns, ips}` без CSR); затем `link.plan` у поставщика с этим `request` (он проверяет имена:
+   HestiaCA — по зонам корня). Предпросмотр входит в хеш плана; `request` в плане поставщика
+   игнорируется.
+2. Применение: `link.prepare {reason: "create"}` у потребителя → `{request}` с CSR (ключ остаётся у
+   потребителя) → Hestia проверяет запрос по типу, подпись CSR и что имена **равны** предпросмотру
+   подтверждённого плана → `link.apply` поставщика с `request` → проверки binding (`types.md`) →
+   `link.apply` потребителя с `binding` и `request`. Ошибка потребителя (или проверок) → откат:
+   `link.remove` у поставщика (отзыв) и у потребителя (выбросить неиспользованный ключ).
+3. Продление (продляемый тип): задача `link-renew` — `link.prepare {reason: "renew"}` →
+   `link.refresh {request, reason}` у поставщика → проверки → `link.apply {action: "update"}` у
+   потребителя. Другие имена — задача завершается без выпуска, связь `degraded` «Имена изменились…».
+   Повторный выпуск с новыми именами — план `reissue` (`POST /api/v1/plugins/links/{id}/plan
+   {"action": "reissue"}`): `link.plan` обеих сторон с `action: update`, `reason: reissue`, затем тот же
+   путь, что продление. После изменения экземпляра-поставщика связи с запросом не перевыпускаются
+   (`link.refresh` без `request` не вызывается).
+
 **Статус:** `link.status` у сторон связи при открытии карты (не чаще раза в минуту) и раз в 5 минут;
-итог — худший из `ok/degraded/down/unknown`.
+итог — худший из `ok/degraded/down/unknown`. У продляемых связей сверх того: `down` «Сертификат
+истёк …» после `not_after`, `degraded` «Продление не удалось: …», если продление не удаётся дольше
+10 % срока после `renew_after`.
 
 **Изменение экземпляра-поставщика:** после успешного `instance.apply` (`update`) Hestia вызывает
 `link.refresh` по каждой его связи; если binding изменился — `link.apply` (`action: update`) у
@@ -346,10 +393,22 @@ exit_code, ports: [{url, target_port, published_port, protocol}]}]}` (по `dock
   `enum` с `options`, `secret`, `target` с необязательным `filter: {"docker_capable": true}`),
   `label`, `help`, `default`, `required`, `advanced`, `min`/`max`, `max_len`, `pattern` (регулярное
   выражение RE2 на всё значение). `schema.presets[]` — `{name, label, values}` (без `secret`/`target`).
+- `images: [{name, file}]` — контейнерные образы в пакете: `name` — `^[a-z][a-z0-9-]{0,31}$`, `file` —
+  `image-<name>` (статический ELF linux/amd64, ≤ 32 МБ), до 8 образов; нужно право `deploy.docker`.
+  Пакеты с образами ставятся на Hestia ≥ v0.4.0 (`min_hestia`); при установке показывается «Пакет
+  содержит образы: …». См. «Образы из пакета» в `deploy.*`.
+- `actions: [{name, label, confirm?, fields?}]` — кнопки экземпляра (`instance.action`), до 16: `name`
+  — как имя поля; `confirm: "password"` — пользователь вводит пароль администратора Hestia
+  (неверный — 403); `fields` — подмножество типов формы (`string`, `text`, `secret`, `bool`, `enum`;
+  `min_len`/`max_len` для строк). Параметры действия Hestia **нигде не сохраняет** (ни в
+  конфигурации, ни в секретах, ни в журнале), значения `secret` маскируются в журнале на время
+  вызова. Вызов — короткая задача `plugin-action` (≤ 60 с; в журнале — кто/какое действие, без
+  параметров); `download` (≤ 1 МБ, имя `[A-Za-z0-9._-]`) Hestia отдаёт браузеру файлом и не хранит.
 - Пакет `<id>-<version>-linux-amd64.hpkg` — tar.gz из `manifest.json`, `plugin` (статический
-  linux/amd64), необязательных `icon.svg` (≤ 64 КБ, очищается от скриптов) и `README.md`, плюс
-  `SHA256SUMS` и `SHA256SUMS.sig` (base64-подпись `SHA256SUMS` ключом автора). Больше ничего: ни
-  каталогов, ни ссылок; всё вместе ≤ 64 МБ.
+  linux/amd64), образов `image-<имя>` из `images`, необязательных `icon.svg` (≤ 64 КБ, очищается от
+  скриптов) и `README.md`, плюс `SHA256SUMS` и `SHA256SUMS.sig` (base64-подпись `SHA256SUMS` ключом
+  автора; `SHA256SUMS` покрывает и образы). Больше ничего: ни каталогов, ни ссылок, ни `image-*` без
+  записи в манифесте; всё вместе ≤ 64 МБ.
 
 Сборка и подпись:
 
@@ -357,6 +416,8 @@ exit_code, ports: [{url, target_port, published_port, protocol}]}]}` (по `dock
 go run ./cmd/hestia-release plugin-keygen --out ~/.config/my-plugins.key --pub my.pub   # один раз
 # впишите содержимое my.pub в author.key манифеста, затем
 CGO_ENABLED=0 go build -o build/plugins/my-plugin/plugin ./plugins/my-plugin
+# образы из images (если есть): build/plugins/my-plugin/image-<имя>; make plugin собирает их сам
+# из plugins/<id>/<имя> или plugins/<id>/server
 go run ./cmd/hestia-release plugin-pack --key ~/.config/my-plugins.key --dir build/plugins/my-plugin --out dist/plugins
 go run ./cmd/hestia-release plugin-verify dist/plugins/my-plugin-v0.1.0-linux-amd64.hpkg
 ```
@@ -445,6 +506,16 @@ v0.2.0 делает то же через `deploy.plan`/`deploy.up`, см. `plugi
 → {"jsonrpc":"2.0","id":10,"method":"target.exec","params":{"instance":5,"target":"ssh:2","cmd":"id"}}
 ← {"jsonrpc":"2.0","id":10,"error":{"code":-32001,"message":"permission denied: цель ssh:2 не выдана экземпляру 5","data":{"instance":5,"target":"ssh:2"}}}
 ```
+
+## Встроенный компонент `hestia`
+
+Контроллер сам — потребитель в графе связей: псевдоплагин `hestia` (`source: builtin`, без процесса
+и пакета, версия = версия контроллера) с одним экземпляром «Hestia» и портом `requires: tls`
+(`tls.cert`, необязательный). Он работает на том же `sdk` и RPC-слое, что и плагины (in-process,
+`net.Pipe`), не показывается среди плагинов и не включается/не отключается/не удаляется; id
+`hestia` зарезервирован. Связь HestiaCA.tls → Hestia.tls включает HTTPS контроллера (ключ — в
+`<data>/tls/`, горячая замена сертификата, редирект HTTP → HTTPS кроме `GET /api/v1/health` и
+`GET /ca.crt`, без HSTS).
 
 ## Совместимость
 

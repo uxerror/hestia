@@ -863,3 +863,69 @@ IP; добавление корня в NSS-базы браузеров.
 4. API CA: токен (32 байта, задержка на неверный) + TLS; ограничение по IP — в roadmap.
 5. `images` в пакетах разрешены всем подписанным плагинам; при установке — «Пакет содержит образы: …».
 6. `instance.action` — общий механизм; в 2a-3 `download ≤ 1 МБ`, не дольше 60 с.
+
+## Отклонения (батч 2a-3a)
+
+- **Код ca-server — пакет `plugins/hestia-ca/caserver`**, `plugins/hestia-ca/server` — тонкий
+  `package main` (флаги, подкоманды `serve|api-pin|root-sha256|health|version`). Иначе тесты плагина
+  не подняли бы ca-server в процессе. Путь сборки образа (`./plugins/hestia-ca/server`) — как в 02j.
+  `GET /v1/issued` дополнительно принимает `?ref=link:<id>` (статус и отзыв связи без перебора).
+- **Зоны по умолчанию — `home,home.arpa`.** Плагин не знает имени Hestia (ни в hello, ни в
+  `instance.plan`), поэтому «зона имени Hestia» в умолчании и предупреждение плана `create` «hestia.lan
+  не входит в зоны CA» не сделаны. Вместо этого встроенный потребитель **сам не просит** DNS-имена
+  вне зон поставщика (зоны — из поля `zones` его конфигурации); если зоны другие (`init: restore` —
+  они из корня), план поставщика отклонит имя с понятной ошибкой.
+- **Неизменяемые поля HestiaCA** проверяются в `instance.plan` (`update` → ошибка с именем поля), а
+  не в `instance.validate`: туда старая конфигурация не приходит.
+- **`confirm: "password"`:** общего счётчика неудачных входов в Hestia нет (02b его не вводил);
+  пароль проверяется так же, как при входе (bcrypt, `auth.VerifyPassword`), неверный — 403.
+- **`actions_enabled` и счётчик неудач продления хранятся в памяти** (последний `instance.status`;
+  `link id → n`): после перезапуска до первого статуса доступны все действия (плагин всё равно
+  проверяет состояние сам), backoff начинается снова с 5 минут.
+- **Продление со сменой имён** завершает задачу `link-renew` ошибкой (видно в журнале задач), а не
+  «без изменений»; `renew_error` = «Имена изменились: … — нужен план», повтор проверки — через час.
+  Статус связи — `degraded` сразу (не после 10 % срока). План `reissue` доступен для любой связи с
+  запросом, не только для контроллера.
+- **Закрепление корня поставщика** (`ca_sha256` = корень `ca.issuer`): сравнивается с корнем
+  текущего binding этой же связи (продление, reissue), иначе — с `ca.issuer`-связями этого
+  экземпляра, иначе — с его другими `tls.cert`-связями. Пока у поставщика нет ни одной связи,
+  закреплять не с чем — первая связь задаёт корень.
+- **Имена контроллера:** DNS — проверенное имя 02g (`PublicURL`), IP — из места установки
+  (`selfinstall.Location.IP`); «как видит AdGuard» не используется (адрес тот же).
+- **`health.tls.enabled`** = режим `on` и listener поднят и сертификат загружен — **в том числе
+  истёкший** (desktop примет его по закреплённому корню и покажет баннер); редирект при истёкшем —
+  нет. `GET /api/v1/tls` дополнительно отдаёт `reset`, `error` (почему listener не поднялся),
+  `link_status`/`link_detail`.
+- **`tls/state.json`** хранит ещё `mode`, `not_before`, `dns`, `ips` — для `hestia tls status` без
+  БД. Право на `hestia tls reset` — euid 0 или пользователь `hestia` (по имени).
+- **Ответ действия с `download`:** имя файла — `[A-Za-z0-9._-]{1,100}` (иначе 502), `message` при
+  скачивании — в заголовке `X-Hestia-Message` (JSON-строка), `Cache-Control: no-store`.
+- **Device-связь `trust`:** `link.remove` не получает binding, поэтому плагин помнит установленный
+  корень (семейство ОС, отпечаток, PEM) в своём `StateDirectory` (`trust-<link>.json`, 0600) и
+  снимает его без живого CA. Статус — поиск строки тела PEM корня в системном бандле
+  (`/etc/ssl/certs/ca-certificates.crt` или `/etc/ca-certificates/extracted/tls-ca-bundle.pem`).
+- **Образы в пакете на контроллере** — `/var/lib/hestia-plugins/<id>/<версия>/image-<имя>` (0644
+  root): их читает сам процесс контроллера. Для dev-плагина — `image-<имя>` рядом с бинарником или
+  `server` (если образ один) — так собирает гейт.
+- **hello v0.4.0:** ключ и сертификат — по связи (`tls-<link>.key`, `tls-<link>.json` в
+  `StateDirectory`), `min_hestia: v0.4.0` (новый тип `tls.cert`); dev-режим плагинов (hello, CA)
+  держит состояние в `$TMPDIR/hestia-*-dev`.
+- **Граф:** экземпляр «Hestia» — `builtin: true`, `controller: true`; у связей — `request` (имена
+  без CSR), `expires_at`, `renew_after`, `renew_error`.
+
+### Нерешённое (проверить на живом CT)
+
+- Владелец и права `/data` в томе `ca-data` после `docker import` (tar: `data/` 0700 65532:65532) —
+  что Docker копирует их в пустой именованный том при первом монтировании (`ls -ln` в `_data`).
+- `docker import --change 'ENTRYPOINT […]' --change 'USER 65532:65532' --change 'LABEL …'` в
+  дистрибутивном Docker (docker.io Debian 12) и `docker image inspect` метки `hestia.sha256`.
+- `read_only: true` + `cap_drop: ALL` + `tmpfs: /tmp`: ca-server пишет только в `/data`; healthcheck
+  `/ca-server health` внутри контейнера (127.0.0.1:9443, пин из `api.crt`).
+- whoami `traefik/whoami:v1.10` с `--port 8443 --cert --key`: файлы проекта 0640 root читаются
+  процессом образа (он работает от root) — на уровне кода сделано так, как в 02j.
+- Открытие `:443` процессом `hestia` на CT 900 (`CAP_NET_BIND_SERVICE` юнита 02d) и самопроверка
+  `https://127.0.0.1:443` с `ServerName` = имя.
+- `docker exec … /ca-server api-pin` через `pct exec` для LXC-цели; `update-ca-certificates` (Debian),
+  `trust anchor --store/--remove` (Garuda).
+- UI (блок «HTTPS», страница HestiaCA, диалог действия) и desktop (прокси, закрепление корня) — батч
+  2a-3b; в 2a-3a HTTPS включается только через API.

@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -28,6 +29,7 @@ import (
 	"github.com/uxerror/hestia/internal/secrets"
 	"github.com/uxerror/hestia/internal/selfinstall"
 	"github.com/uxerror/hestia/internal/store"
+	"github.com/uxerror/hestia/internal/tlsself"
 	"github.com/uxerror/hestia/internal/update"
 	vers "github.com/uxerror/hestia/internal/version"
 	"github.com/uxerror/hestia/web"
@@ -50,6 +52,8 @@ func run(args []string) int {
 		return cmdDesktop(args[1:])
 	case "healthcheck":
 		return cmdHealthcheck(args[1:])
+	case "tls":
+		return cmdTLS(args[1:])
 	case "version", "--version", "-v":
 		fmt.Println("hestia", version)
 		return 0
@@ -66,17 +70,22 @@ func run(args []string) int {
 func usage() {
 	fmt.Fprint(os.Stderr, `Использование: hestia <команда>
 
-  serve    [--listen :8080] [--data ./data] [--plugin-dev <бинарник>]
+  serve    [--listen :8080] [--https-listen :443] [--data ./data] [--plugin-dev <бинарник>]
                                                   HTTP-сервер (API + веб-интерфейс);
                                                   --plugin-dev запускает плагин дочерним
                                                   процессом без песочницы (разработка;
-                                                  флаг можно повторять)
+                                                  флаг можно повторять); --https-listen ""
+                                                  запрещает HTTPS в этом запуске
   desktop  [--data ~/.local/share/hestia]         окно приложения
 
 Если в каталоге данных есть remote.json, Hestia уже перенесена на сервер: база не
 открывается, показывается экран «Hestia работает на <адрес>».
   healthcheck --url http://127.0.0.1:80 [--version X]
                                                   проверка здоровья (для скрипта обновления)
+  tls status [--data /var/lib/hestia]             режим HTTPS, имена, сроки, отпечаток корня
+                                                  (только файлы, без базы)
+  tls reset  [--data /var/lib/hestia]             выключить HTTPS вручную (root или hestia),
+                                                  затем: systemctl restart hestia
   version                                         версия
 `)
 }
@@ -92,6 +101,7 @@ type app struct {
 	dns     *dnsname.Service
 	gate    *selfinstall.Gate
 	plugins *plugins.Manager
+	tls     *tlsself.Service    // serve mode only
 	remote  *selfinstall.Remote // set when started in "moved" mode (no database)
 }
 
@@ -100,6 +110,9 @@ func (a *app) close() {
 		return
 	}
 	a.stopInv()
+	if a.tls != nil {
+		a.tls.Close()
+	}
 	a.plugins.Close()
 	a.inv.Wait()
 	a.net.Wait()
@@ -122,7 +135,7 @@ func (l *stringList) Set(v string) error {
 }
 
 // newApp builds the handler used by both serve and desktop.
-func newApp(ctx context.Context, dataDir, mode string, pluginDev []string, githubAPI string) (*app, error) {
+func newApp(ctx context.Context, dataDir, mode string, pluginDev []string, githubAPI, httpsListen string) (*app, error) {
 	// A moved controller never touches its (archived) database.
 	rem, err := selfinstall.ReadRemote(dataDir)
 	if err != nil {
@@ -206,6 +219,36 @@ func newApp(ctx context.Context, dataDir, mode string, pluginDev []string, githu
 		},
 	}).Init()
 	pm.Start()
+	var tlsSvc *tlsself.Service
+	if mode == "serve" {
+		tlsSvc = &tlsself.Service{
+			DataDir: dataDir, Store: st, Addr: httpsListen, InstanceID: instanceID, Version: version,
+			Names: func(ctx context.Context) (dnsNames, ips []string) {
+				if u := dns.PublicURL(ctx); u != "" {
+					dnsNames = append(dnsNames, strings.TrimPrefix(u, "http://"))
+				}
+				if state, err := si.State(ctx); err == nil && state.Location != nil && net.ParseIP(state.Location.IP) != nil {
+					ips = append(ips, net.ParseIP(state.Location.IP).String())
+				}
+				return dnsNames, ips
+			},
+			PeerZones: func(ctx context.Context, iid int64) []string { return instanceZones(ctx, st, iid) },
+		}
+		if err := tlsSvc.Init(ctx); err != nil {
+			pm.Close()
+			stopInv()
+			runner.Shutdown()
+			_ = st.Close()
+			return nil, fmt.Errorf("HTTPS: %w", err)
+		}
+		if _, err := pm.StartBuiltin(ctx, tlsself.Manifest(version), tlsSvc.Plugin()); err != nil {
+			pm.Close()
+			stopInv()
+			runner.Shutdown()
+			_ = st.Close()
+			return nil, fmt.Errorf("встроенный компонент Hestia: %w", err)
+		}
+	}
 	for _, p := range pluginDev {
 		if err := pm.StartDev(p); err != nil {
 			pm.Close()
@@ -218,10 +261,58 @@ func newApp(ctx context.Context, dataDir, mode string, pluginDev []string, githu
 	}
 	h := api.New(api.Config{
 		Store: st, Auth: auth.New(st), Runner: runner, Onboard: ob, Inventory: inv, Netscan: nm, DNS: dns, Identity: id,
-		Selfinstall: si, Gate: gate, Update: up, Plugins: pm, InstanceID: instanceID,
+		Selfinstall: si, Gate: gate, Update: up, Plugins: pm, TLS: tlsSvc, InstanceID: instanceID,
 		Web: web.Dist(), Mode: mode, Version: version,
 	})
-	return &app{store: st, runner: runner, handler: h, stopInv: stopInv, inv: inv, net: nm, dns: dns, gate: gate, plugins: pm}, nil
+	if tlsSvc != nil {
+		tlsSvc.SetHandler(h)
+		tlsSvc.Start()
+	}
+	return &app{store: st, runner: runner, handler: h, stopInv: stopInv, inv: inv, net: nm, dns: dns, gate: gate, plugins: pm, tls: tlsSvc}, nil
+}
+
+// instanceZones are the DNS zones in the configuration of a provider
+// instance ("zones": "home,home.arpa"; nil if it has none).
+func instanceZones(ctx context.Context, st *store.Store, iid int64) []string {
+	in, err := st.GetInstance(ctx, iid)
+	if err != nil {
+		return nil
+	}
+	var cfg map[string]any
+	if json.Unmarshal([]byte(in.Config), &cfg) != nil {
+		return nil
+	}
+	z, _ := cfg["zones"].(string)
+	var out []string
+	for _, p := range strings.Split(z, ",") {
+		if p = strings.TrimSpace(strings.ToLower(p)); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func cmdTLS(args []string) int {
+	if len(args) == 0 || (args[0] != "status" && args[0] != "reset") {
+		fmt.Fprintln(os.Stderr, "использование: hestia tls status|reset [--data /var/lib/hestia]")
+		return 2
+	}
+	fs := flag.NewFlagSet("tls "+args[0], flag.ContinueOnError)
+	data := fs.String("data", "/var/lib/hestia", "каталог данных")
+	if err := fs.Parse(args[1:]); err != nil {
+		return 2
+	}
+	var err error
+	if args[0] == "status" {
+		err = tlsself.StatusReport(os.Stdout, *data, time.Now())
+	} else {
+		err = tlsself.Reset(os.Stdout, *data, time.Now())
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "ошибка:", err)
+		return 1
+	}
+	return 0
 }
 
 func cmdServe(args []string) int {
@@ -231,13 +322,14 @@ func cmdServe(args []string) int {
 	var pluginDev stringList
 	fs.Var(&pluginDev, "plugin-dev", "запустить плагин дочерним процессом без песочницы (разработка; можно повторять)")
 	githubAPI := fs.String("github-api", update.DefaultAPI, "адрес API GitHub для обновлений и каталога плагинов (для тестов)")
+	httpsListen := fs.String("https-listen", ":443", "адрес HTTPS (открывается, когда HTTPS включён связью с HestiaCA; пусто — HTTPS запрещён)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	a, err := newApp(ctx, *data, "serve", pluginDev, *githubAPI)
+	a, err := newApp(ctx, *data, "serve", pluginDev, *githubAPI, *httpsListen)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "ошибка:", err)
 		return 1
@@ -279,7 +371,7 @@ func cmdDesktop(args []string) int {
 	if !desktop.Available {
 		return desktop.Run(nil, "", "") // prints the stub message, exit code 2
 	}
-	a, err := newApp(context.Background(), *data, "desktop", nil, update.DefaultAPI)
+	a, err := newApp(context.Background(), *data, "desktop", nil, update.DefaultAPI, "")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "ошибка:", err)
 		return 1

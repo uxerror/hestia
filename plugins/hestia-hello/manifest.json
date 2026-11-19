@@ -2,11 +2,11 @@
   "protocol": 1,
   "id": "hestia-hello",
   "name": "Hestia Hello",
-  "version": "v0.3.0",
+  "version": "v0.4.0",
   "description": "Демонстрационный сервис whoami в Docker: отвечает приветствием по HTTP",
   "homepage": "https://github.com/uxerror/hestia",
   "author": {"name": "uxerror", "key": "v/i7jzbuZQGgOed7Q04PAQy3kj8U1gODTDdZdx2IXbo="},
-  "min_hestia": "v0.3.0",
+  "min_hestia": "v0.4.0",
   "permissions": ["targets.read", "targets.exec", "deploy.docker", "net.outbound", "links.client"],
   "provides": [
     {"name": "web", "type": "http.service", "label": "Веб-страница", "client": true, "multi": true,
@@ -15,7 +15,9 @@
         "pattern": "^[a-z0-9.-]{1,63}$", "help": "Имя, по которому устройство найдёт сервис (запись в /etc/hosts)"}
      ]}}
   ],
-  "requires": [],
+  "requires": [
+    {"name": "tls", "type": "tls.cert", "label": "HTTPS", "optional": true, "multi": false}
+  ],
   "multi_instance": true,
   "schema": {
     "fields": [
@@ -25,7 +27,11 @@
       {"name": "port", "type": "int", "label": "Порт", "default": 8080, "min": 1, "max": 65535,
        "help": "Порт на цели, на котором whoami будет отвечать"},
       {"name": "message", "type": "string", "label": "Приветствие", "default": "Привет от Hestia",
-       "max_len": 200}
+       "max_len": 200},
+      {"name": "tls_port", "type": "int", "label": "Порт HTTPS", "default": 8443, "min": 1, "max": 65535, "advanced": true,
+       "help": "Порт HTTPS-whoami, когда подключён сертификат (связь «HTTPS»)"},
+      {"name": "tls_name", "type": "string", "label": "Имя в сертификате", "advanced": true, "pattern": "^[a-z0-9.-]{1,253}$",
+       "help": "Пусто — сертификат только на IP цели"}
     ],
     "presets": [
       {"name": "default", "label": "По умолчанию", "values": {}},

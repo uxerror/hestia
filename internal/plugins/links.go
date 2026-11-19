@@ -83,9 +83,24 @@ type linkStep struct {
 	consPlan sdk.Plan
 }
 
+// actionReissue is a link step that asks for a new certificate with
+// (possibly) new names from the same provider (types with a request).
+const actionReissue = "reissue"
+
+// hasRequest reports whether the type of the link has a request (the
+// consumer is asked with link.prepare before the provider).
+func (ls *linkStep) hasRequest() bool {
+	t, ok := types.Lookup(ls.typ)
+	return ok && len(t.Request) > 0 && ls.consumer != nil
+}
+
 func (ls *linkStep) request(side *linkSide, action string) sdk.LinkRequest {
+	reason := ""
+	if action == actionReissue {
+		action, reason = sdk.ActionUpdate, sdk.ReasonReissue
+	}
 	req := sdk.LinkRequest{Link: ls.link.ID, Kind: ls.link.Kind, Role: side.role, Action: action, Instance: sdkInstance(side.inst),
-		Port: side.port.PortName(), Type: ls.typ, Config: ls.config}
+		Port: side.port.PortName(), Type: ls.typ, Config: ls.config, Reason: reason}
 	if req.Config == nil {
 		req.Config = sdk.Config{}
 	}
@@ -221,6 +236,8 @@ func (m *Manager) callLink(ctx context.Context, ls *linkStep, side *linkSide, me
 	}
 	var re *rpc.Error
 	switch {
+	case errors.As(err, &re) && re.Code == rpc.CodeMethodNotFound && method == sdk.MethodLinkPrepare:
+		return fmt.Errorf("плагин «%s» не умеет запрашивать сертификаты (link.prepare): связь %s недоступна", side.pluginName, ls.typ)
 	case errors.As(err, &re) && re.Code == rpc.CodeMethodNotFound:
 		return fmt.Errorf(msgNoLinks, side.pluginName)
 	case errors.As(err, &re):
@@ -233,16 +250,44 @@ func (m *Manager) callLink(ctx context.Context, ls *linkStep, side *linkSide, me
 	return fmt.Errorf("«%s»: %w", side.inst.Name, pluginErr(err))
 }
 
-// planSides asks every side for its plan of the action.
+// planSides asks every side for its plan of the action. For a type with a
+// request the consumer plans first: its preview of the request goes to the
+// provider's plan (and into the hash of the plan).
 func (m *Manager) planSides(ctx context.Context, ls *linkStep) error {
-	for _, side := range ls.sides() {
+	sides := ls.sides()
+	withReq := ls.hasRequest() && ls.action != sdk.ActionRemove
+	if withReq {
+		sides = []*linkSide{ls.consumer, &ls.provider}
+	}
+	for _, side := range sides {
 		var pl sdk.Plan
-		if err := m.callLink(ctx, ls, side, sdk.MethodLinkPlan, ls.request(side, ls.action), &pl, nil, nil); err != nil {
+		req := ls.request(side, ls.action)
+		if withReq && side.role == sdk.RoleProvider {
+			req.Request = ls.consPlan.Request
+		}
+		if err := m.callLink(ctx, ls, side, sdk.MethodLinkPlan, req, &pl, nil, nil); err != nil {
 			return newErr(http.StatusBadGateway, "%v", err)
 		}
 		pl, err := sanitizePlan(pl)
 		if err != nil {
 			return err
+		}
+		if withReq && side.role == sdk.RoleConsumer {
+			if len(pl.Request) == 0 || string(pl.Request) == "null" {
+				return newErr(http.StatusUnprocessableEntity, "плагин «%s» не умеет запрашивать сертификаты: связь %s недоступна", side.pluginName, ls.typ)
+			}
+			if _, err := types.ValidateRequest(ls.typ, pl.Request, true); err != nil {
+				return newErr(http.StatusBadGateway, "«%s»: предпросмотр запроса: %v", side.inst.Name, err)
+			}
+			c, err := canonical(pl.Request)
+			if err != nil {
+				return err
+			}
+			pl.Request = c
+		} else {
+			// Only the consumer's preview counts; a request from the
+			// provider is ignored.
+			pl.Request = nil
 		}
 		ls.setPlan(side, pl)
 	}
@@ -557,8 +602,15 @@ func (m *Manager) storeLinkSecrets(ctx context.Context, link int64, secs map[str
 // applyLink carries out a link step within a job; masks are values to hide
 // in the log.
 func (m *Manager) applyLink(ctx context.Context, run *jobs.Run, ls *linkStep) error {
-	if ls.action == sdk.ActionRemove {
+	switch ls.action {
+	case sdk.ActionRemove:
 		return m.removeLink(ctx, run, ls)
+	case actionReissue:
+		if err := m.rotateLink(ctx, run, ls, sdk.ReasonReissue); err != nil {
+			return err
+		}
+		go m.refreshLink(m.ctx, ls.link.ID)
+		return nil
 	}
 	bg := context.WithoutCancel(ctx)
 	id := ls.link.ID
@@ -606,19 +658,51 @@ func (m *Manager) applyLink(ctx context.Context, run *jobs.Run, ls *linkStep) er
 		}
 	}
 
+	withReq := ls.hasRequest()
+	undoConsumer := func() {
+		if !withReq {
+			return
+		}
+		req := ls.request(ls.consumer, sdk.ActionRemove)
+		req.Plan = &ls.consPlan
+		if err := m.callLink(bg, ls, ls.consumer, sdk.MethodLinkRemove, req, nil, run, nil); err != nil {
+			run.Log("error", "Откат у потребителя не удался: "+err.Error())
+		} else {
+			run.Log("info", "Откат у потребителя выполнен")
+		}
+	}
+	var full json.RawMessage
+	if withReq {
+		var err error
+		if full, err = m.prepareRequest(ctx, run, ls, sdk.ReasonCreate); err != nil {
+			undoConsumer()
+			return fail(err)
+		}
+		if err := m.Store.SetLinkRequest(ctx, id, string(full)); err != nil {
+			undoConsumer()
+			return fail(err)
+		}
+	}
+
 	run.Log("info", fmt.Sprintf("«%s»: настройка связи (%s)", ls.provider.inst.Name, ls.provider.role))
 	var res sdk.LinkResult
 	req := ls.request(&ls.provider, sdk.ActionCreate)
 	req.Plan = &ls.provPlan
+	req.Request = full
 	if err := m.callLink(ctx, ls, &ls.provider, sdk.MethodLinkApply, req, &res, run, nil); err != nil {
 		if ls.device != nil {
 			undoProvider()
 		}
+		undoConsumer()
 		return fail(err)
 	}
 	binding, secs, err := processBinding(id, ls.typ, res.Binding, ls.consumer != nil)
+	if err == nil && withReq {
+		err = checkRequestBinding(ls.typ, res.Binding, full, m.providerRoot(ctx, ls.provider.inst.ID, id), m.Now())
+	}
 	if err != nil {
 		undoProvider()
+		undoConsumer()
 		return fail(err)
 	}
 	masks := secretValues(secs)
@@ -637,10 +721,15 @@ func (m *Manager) applyLink(ctx context.Context, run *jobs.Run, ls *linkStep) er
 		creq := ls.request(ls.consumer, sdk.ActionCreate)
 		creq.Binding = json.RawMessage(binding)
 		creq.Plan = &ls.consPlan
+		creq.Request = full
 		if err := m.callLink(ctx, ls, ls.consumer, sdk.MethodLinkApply, creq, nil, run, masks); err != nil {
 			undoProvider()
+			undoConsumer()
 			return fail(err)
 		}
+	}
+	if err := m.recordRenewal(bg, id, ls.typ, binding); err != nil {
+		run.Log("warn", "Срок действия связи: "+err.Error())
 	}
 	now := m.Now().UTC()
 	if err := m.Store.SetLinkStatus(bg, id, sdk.StateUnknown, "", &now); err != nil {
@@ -741,6 +830,12 @@ func (m *Manager) LinkHealth(ctx context.Context, id int64) (store.PluginLink, e
 		}
 	}
 	now := m.Now().UTC()
+	if st, d := renewalState(l, now); st != "" {
+		if stateRank[st] > stateRank[state] {
+			state = st
+		}
+		details = append([]string{d}, details...)
+	}
 	if err := m.Store.SetLinkHealth(ctx, id, state, truncate(strings.Join(details, "; "), 1000), now); err != nil {
 		return l, err
 	}
@@ -800,6 +895,11 @@ func (m *Manager) refreshProviderLinks(ctx context.Context, run *jobs.Run, iid i
 		ls, err := m.existingLinkStep(ctx, l)
 		if err != nil {
 			run.Log("warn", fmt.Sprintf("Связь %d: %s", l.ID, errText(err)))
+			continue
+		}
+		if ls.hasRequest() {
+			// A new binding means a new certificate: renewal and reissue
+			// handle that, a change of the provider does not.
 			continue
 		}
 		if err := m.refreshOne(ctx, run, ls); err != nil {

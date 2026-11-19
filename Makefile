@@ -59,13 +59,22 @@ define plugin_args
 endef
 
 # plugin builds and signs a plugin package, e.g.
-#   make plugin ID=hestia-hello VERSION=v0.3.0
+#   make plugin ID=hestia-hello VERSION=v0.4.0
 #   make plugin ID=hestia-probe VERSION=v0.1.0
-# VERSION must match manifest.json (plugin-pack checks it).
+#   make plugin ID=hestia-ca VERSION=v0.1.0
+# VERSION must match manifest.json (plugin-pack checks it). A plugin with
+# "images" in its manifest builds plugins/<id>/<name> (or plugins/<id>/server
+# for its image) into build/plugins/<id>/image-<name> - a static binary
+# Hestia turns into a container image on the target.
 plugin:
 	$(plugin_args)
 	mkdir -p build/plugins/$(ID) dist/plugins
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags '-s -w' -o build/plugins/$(ID)/plugin ./plugins/$(ID)
+	@set -e; for img in $$(go run ./cmd/hestia-release plugin-images plugins/$(ID)/manifest.json); do \
+		src=./plugins/$(ID)/$$img; [ -d "$$src" ] || src=./plugins/$(ID)/server; \
+		echo "образ $$img: $$src"; \
+		CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags '-s -w' -o build/plugins/$(ID)/image-$$img "$$src"; \
+	done
 	go run ./cmd/hestia-release plugin-pack --key '$(PLUGIN_KEY)' --dir build/plugins/$(ID) --src plugins/$(ID) --out dist/plugins --version $(VERSION)
 	go run ./cmd/hestia-release plugin-verify $(PLUGIN_PKG)
 

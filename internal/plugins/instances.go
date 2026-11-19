@@ -70,6 +70,8 @@ type applyJob struct {
 	// confirmed: the plan had a "danger" action and the user confirmed it
 	// (deploy.up may then change container features).
 	confirmed bool
+	// action: a short instance.action job (no deploy in it).
+	action bool
 
 	mu    sync.Mutex
 	masks []string
@@ -265,6 +267,9 @@ func (m *Manager) validate(ctx context.Context, pid string, cfg sdk.Config) erro
 // that it has an id (and grants) while the plugin plans; drafts disappear
 // with their plan.
 func (m *Manager) CreatePlan(ctx context.Context, pid, name string, in map[string]any) (*PlanView, error) {
+	if pid == BuiltinID {
+		return nil, errBuiltinChange()
+	}
 	if _, _, err := m.pluginForInstances(ctx, pid); err != nil {
 		return nil, err
 	}
@@ -360,6 +365,9 @@ func (m *Manager) ChangePlan(ctx context.Context, iid int64, action string, in m
 	}
 	if err != nil {
 		return nil, err
+	}
+	if inst.PluginID == BuiltinID {
+		return nil, errBuiltinChange()
 	}
 	_, man, err := m.pluginForInstances(ctx, inst.PluginID)
 	if err != nil {
@@ -722,6 +730,14 @@ func (m *Manager) instanceStatus(ctx context.Context, pid string, inst store.Plu
 	}
 	st.Detail = truncate(st.Detail, 1000)
 	st.Endpoints = safeEndpoints(st.Endpoints)
+	if len(st.ActionsEnabled) > maxActions {
+		st.ActionsEnabled = st.ActionsEnabled[:maxActions]
+	}
+	if st.ActionsEnabled != nil {
+		m.setActionsOn(inst.ID, st.ActionsEnabled)
+	} else {
+		m.setActionsOn(inst.ID, nil)
+	}
 	eps, _ := json.Marshal(st.Endpoints)
 	if err := m.Store.SetInstanceStatus(ctx, inst.ID, st.State, st.Detail, string(eps), m.Now().UTC()); err != nil {
 		return st, err

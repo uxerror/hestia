@@ -31,6 +31,13 @@ const (
 	MethodLinkRemove  = "link.remove"
 	MethodLinkStatus  = "link.status"
 	MethodLinkRefresh = "link.refresh"
+	// MethodLinkPrepare asks the consumer of a link whose type has a request
+	// (tls.cert) for that request before the provider is called.
+	MethodLinkPrepare = "link.prepare"
+
+	// MethodAction runs an action of the manifest (optional: a plugin
+	// without it answers -32601).
+	MethodAction = "instance.action"
 )
 
 // Methods of Hestia (plugin → Hestia).
@@ -219,11 +226,15 @@ type Action struct {
 }
 
 // Plan is what the plugin is going to do. Data is opaque to Hestia: it is
-// stored with the plan and handed back to Apply unchanged.
+// stored with the plan and handed back to Apply unchanged. Request is set
+// only by the consumer of a link whose type has a request (tls.cert): the
+// preview of what it will ask the provider for (no key material, e.g. the
+// names without the CSR); Hestia shows it to the provider's link.plan.
 type Plan struct {
 	Actions  []Action        `json:"actions"`
 	Warnings []string        `json:"warnings"`
 	Data     json.RawMessage `json:"data,omitempty"`
+	Request  json.RawMessage `json:"request,omitempty"`
 }
 
 // ApplyRequest carries out a confirmed plan.
@@ -255,6 +266,12 @@ type LinkPeer struct {
 // (consumer and client in link.apply; secrets are references
 // {"secret": "link:<id>:<field>"}, read them with Host.SecretGet); Plan is
 // this side's plan (link.apply, link.remove).
+//
+// Request is what the consumer asks for (types with a request, tls.cert):
+// the preview in the provider's link.plan, the full request (with the CSR)
+// in the provider's link.apply and link.refresh, the consumer's own request
+// in its link.apply. Reason is the cause of link.prepare: create, renew or
+// reissue.
 type LinkRequest struct {
 	JobID    string          `json:"job_id,omitempty"`
 	Link     int64           `json:"link"`
@@ -269,6 +286,20 @@ type LinkRequest struct {
 	Config   Config          `json:"config"`
 	Binding  json.RawMessage `json:"binding,omitempty"`
 	Plan     *Plan           `json:"plan,omitempty"`
+	Request  json.RawMessage `json:"request,omitempty"`
+	Reason   string          `json:"reason,omitempty"`
+}
+
+// Reasons of link.prepare.
+const (
+	ReasonCreate  = "create"
+	ReasonRenew   = "renew"
+	ReasonReissue = "reissue"
+)
+
+// LinkPrepared is the answer of link.prepare.
+type LinkPrepared struct {
+	Request json.RawMessage `json:"request"`
 }
 
 // LinkResult is the answer of link.apply and link.refresh: the provider
@@ -284,11 +315,40 @@ type LinkStatus struct {
 	Detail string `json:"detail,omitempty"`
 }
 
-// Status is the health of an instance.
+// Status is the health of an instance. ActionsEnabled lists the actions of
+// the manifest that can run now (nil: all of them).
 type Status struct {
-	State     string     `json:"state"`
-	Detail    string     `json:"detail,omitempty"`
-	Endpoints []Endpoint `json:"endpoints"`
+	State          string     `json:"state"`
+	Detail         string     `json:"detail,omitempty"`
+	Endpoints      []Endpoint `json:"endpoints"`
+	ActionsEnabled []string   `json:"actions_enabled"`
+}
+
+// ActionRequest runs an action of the manifest. Params are the values of the
+// action's fields (secret fields as plain strings): Hestia stores them
+// nowhere and masks secret ones in the job log.
+type ActionRequest struct {
+	JobID    string   `json:"job_id,omitempty"`
+	Instance Instance `json:"instance"`
+	Action   string   `json:"action"`
+	Params   Config   `json:"params"`
+}
+
+// MaxDownload bounds ActionResult.Download.Data.
+const MaxDownload = 1 << 20
+
+// ActionResult is the answer of instance.action: a message for the user
+// and/or a file the browser downloads (Hestia does not keep it).
+type ActionResult struct {
+	Message  string    `json:"message,omitempty"`
+	Download *Download `json:"download,omitempty"`
+}
+
+// Download is a file returned by an action.
+type Download struct {
+	Name string `json:"name"`
+	MIME string `json:"mime"`
+	Data []byte `json:"data_b64"`
 }
 
 // Endpoint is a link shown with the instance (http/https only).
@@ -392,7 +452,10 @@ type DeployFile struct {
 
 // DeployRequest is the parameter of deploy.plan and deploy.up. Compose is
 // the compose file as a JSON object (Docker compose reads JSON as YAML);
-// JobID is required for deploy.up (the apply job the steps go to).
+// JobID is required for deploy.up (the apply job the steps go to). Images
+// are names from the manifest's "images": Hestia loads them from the plugin
+// package onto the target (docker import) as
+// hestia.local/<plugin>/<name>:<plugin version>.
 type DeployRequest struct {
 	JobID    string          `json:"job_id,omitempty"`
 	Instance int64           `json:"instance"`
@@ -400,6 +463,7 @@ type DeployRequest struct {
 	Project  string          `json:"project"`
 	Compose  json.RawMessage `json:"compose"`
 	Files    []DeployFile    `json:"files,omitempty"`
+	Images   []string        `json:"images,omitempty"`
 }
 
 // DeployDownRequest stops and removes a project (Volumes: its named volumes
@@ -513,7 +577,37 @@ type Manifest struct {
 	Requires      []Port   `json:"requires"`
 	MultiInstance bool     `json:"multi_instance"`
 	Schema        Schema   `json:"schema"`
+	// Images are container images shipped in the package (static binaries,
+	// see docs/plugins/protocol.md); Actions are buttons of an instance.
+	Images  []Image     `json:"images,omitempty"`
+	Actions []ActionDef `json:"actions,omitempty"`
 }
+
+// Image is a container image in the package: the file "image-<name>" is a
+// static linux/amd64 binary that becomes /<name> of the image.
+type Image struct {
+	Name string `json:"name"`
+	File string `json:"file"`
+}
+
+// ImageRef is how a compose file refers to an image of the package.
+func ImageRef(plugin, name, version string) string {
+	return "hestia.local/" + plugin + "/" + name + ":" + version
+}
+
+// ActionDef is an action of an instance (instance.action). Confirm
+// "password" makes the user enter the Hestia administrator password; Fields
+// are a subset of the form types (string, text, secret, bool, enum).
+type ActionDef struct {
+	Name    string  `json:"name"`
+	Label   string  `json:"label"`
+	Confirm string  `json:"confirm,omitempty"`
+	Fields  []Field `json:"fields,omitempty"`
+}
+
+// ConfirmPassword is ActionDef.Confirm for actions that need the
+// administrator password.
+const ConfirmPassword = "password"
 
 // Author is who signed the package.
 type Author struct {
@@ -590,6 +684,7 @@ type Field struct {
 	Min      *float64       `json:"min,omitempty"`
 	Max      *float64       `json:"max,omitempty"`
 	MaxLen   int            `json:"max_len,omitempty"`
+	MinLen   int            `json:"min_len,omitempty"`
 	Pattern  string         `json:"pattern,omitempty"`
 	Options  []Option       `json:"options,omitempty"`
 	Filter   map[string]any `json:"filter,omitempty"`

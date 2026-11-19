@@ -349,3 +349,17 @@ func (h *Host) LinkRefresh(ctx context.Context, req sdk.LinkRequest) (json.RawMe
 	err := h.conn.Call(ctx, sdk.MethodLinkRefresh, req, &out)
 	return out.Binding, err
 }
+
+// LinkPrepare calls link.prepare and returns the request (consumer).
+func (h *Host) LinkPrepare(ctx context.Context, req sdk.LinkRequest) (json.RawMessage, error) {
+	var out sdk.LinkPrepared
+	err := h.conn.CallNoTimeout(ctx, sdk.MethodLinkPrepare, req, &out)
+	return out.Request, err
+}
+
+// Action calls instance.action.
+func (h *Host) Action(ctx context.Context, req sdk.ActionRequest) (sdk.ActionResult, error) {
+	var out sdk.ActionResult
+	err := h.conn.CallNoTimeout(ctx, sdk.MethodAction, req, &out)
+	return out, err
+}

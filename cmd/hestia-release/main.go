@@ -35,8 +35,11 @@ func usage() {
          указывает --pub для своего файла)
   plugin-pack [--key ~/.config/hestia/plugins.key] --dir build/plugins/<id>
               [--src plugins/<id>] [--out dist/plugins]
-         собрать и подписать <id>-<версия>-linux-amd64.hpkg: plugin из --dir,
-         manifest.json, icon.svg, README.md из --dir или --src
+         собрать и подписать <id>-<версия>-linux-amd64.hpkg: plugin и образы
+         image-<имя> (images манифеста) из --dir, manifest.json, icon.svg,
+         README.md из --dir или --src
+  plugin-images <manifest.json>
+         имена образов из images манифеста (по одному в строке; для make plugin)
   plugin-verify [--pub internal/plugins/official.pub] <file.hpkg>
          проверить пакет тем же кодом, что и контроллер
   catalog-add --index dist/plugins/index.json [--key ~/.config/hestia/plugins.key]
@@ -67,6 +70,8 @@ func run(args []string) int {
 		err = pluginPack(args[1:])
 	case "plugin-verify":
 		err = pluginVerify(args[1:])
+	case "plugin-images":
+		err = pluginImages(args[1:])
 	case "catalog-add":
 		err = catalogAdd(args[1:])
 	case "help", "--help", "-h":
@@ -238,6 +243,25 @@ func pluginPack(args []string) error {
 		return err
 	}
 	fmt.Println("пакет:", path)
+	return nil
+}
+
+// pluginImages prints the image names of a manifest.
+func pluginImages(args []string) error {
+	if len(args) != 1 {
+		return errors.New("укажите manifest.json")
+	}
+	b, err := os.ReadFile(args[0])
+	if err != nil {
+		return err
+	}
+	m, err := plugins.ParseManifest(b)
+	if err != nil {
+		return err
+	}
+	for _, im := range m.Images {
+		fmt.Println(im.Name)
+	}
 	return nil
 }
 

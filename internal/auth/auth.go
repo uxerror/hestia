@@ -94,6 +94,23 @@ func (s *Service) Login(ctx context.Context, username, password string) (store.U
 	return u, tok, err
 }
 
+// VerifyPassword checks the password of a signed-in user (actions that
+// need the administrator password); ErrBadCredentials if it is wrong.
+func (s *Service) VerifyPassword(ctx context.Context, username, password string) error {
+	u, err := s.store.UserByUsername(ctx, username)
+	if errors.Is(err, store.ErrNotFound) {
+		_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(password))
+		return ErrBadCredentials
+	}
+	if err != nil {
+		return err
+	}
+	if bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)) != nil {
+		return ErrBadCredentials
+	}
+	return nil
+}
+
 // Logout deletes the session behind a token.
 func (s *Service) Logout(ctx context.Context, token string) error {
 	if token == "" {

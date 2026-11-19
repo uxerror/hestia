@@ -168,7 +168,7 @@ func TestPluginDevEndToEnd(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 	}
 	p := list.Plugins[0]
-	if p.ID != "hestia-hello" || p.Version != "v0.3.0" || !p.Dev || p.Source != "dev" || list.Available ||
+	if p.ID != "hestia-hello" || p.Version != "v0.4.0" || !p.Dev || p.Source != "dev" || list.Available ||
 		strings.Join(p.Permissions, ",") != "targets.read,targets.exec,deploy.docker,net.outbound,links.client" {
 		t.Fatalf("%+v %+v", p, list)
 	}

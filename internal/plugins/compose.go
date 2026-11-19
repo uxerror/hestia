@@ -39,7 +39,11 @@ type preparedCompose struct {
 
 // prepareCompose checks raw against the rules and adds the labels. dir is
 // the project directory: bind mounts and file references must stay inside.
-func prepareCompose(raw json.RawMessage, dir, pluginID string, instance int64) (*preparedCompose, error) {
+//
+// images are the references of the package images of this call
+// (sdk.ImageRef): a service may use "hestia.local/…" only as one of them and
+// then gets pull_policy "never".
+func prepareCompose(raw json.RawMessage, dir, pluginID string, instance int64, images ...string) (*preparedCompose, error) {
 	if len(bytes.TrimSpace(raw)) == 0 {
 		return nil, badParams("compose: нужен JSON-объект compose-файла")
 	}
@@ -63,6 +67,13 @@ func prepareCompose(raw json.RawMessage, dir, pluginID string, instance int64) (
 	names := make([]string, 0, len(services))
 	for name, v := range services {
 		svc := v.(map[string]any)
+		if img := str(svc["image"]); strings.HasPrefix(strings.ToLower(img), imageRegistry) {
+			if !slices.Contains(images, img) {
+				return nil, composeErr("services."+name+".image",
+					"образ %s: hestia.local/ допустим только для своих образов из пакета этой версии, перечисленных в images вызова", img)
+			}
+			svc["pull_policy"] = "never"
+		}
 		svc["labels"] = withLabels(svc["labels"], pluginID, instance)
 		names = append(names, name)
 	}

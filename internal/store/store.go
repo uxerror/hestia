@@ -312,6 +312,15 @@ CREATE TABLE map_positions (
 	updated_at INTEGER NOT NULL
 );
 `},
+	// 2a-3: requests of links (tls.cert) and renewal of renewable links.
+	{10, `
+ALTER TABLE plugin_links ADD COLUMN request TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE plugin_links ADD COLUMN expires_at INTEGER;
+ALTER TABLE plugin_links ADD COLUMN renew_after INTEGER;
+ALTER TABLE plugin_links ADD COLUMN renew_error TEXT NOT NULL DEFAULT '';
+ALTER TABLE plugin_links ADD COLUMN renew_retry_at INTEGER;
+CREATE INDEX plugin_links_renew ON plugin_links(renew_after) WHERE renew_after IS NOT NULL;
+`},
 }
 
 // KnownSchema is the newest schema version this binary can work with.

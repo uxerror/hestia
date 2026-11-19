@@ -79,6 +79,9 @@ func (m *Manager) List(ctx context.Context) (List, error) {
 	}
 	updates := m.catalogUpdates(ctx, ps)
 	for _, p := range ps {
+		if p.Source == store.PluginSourceBuiltin {
+			continue
+		}
 		v := m.view(p)
 		v.Update = updates[p.ID]
 		for _, in := range insts {
@@ -266,6 +269,9 @@ func (m *Manager) Authors(ctx context.Context) ([]AuthorEntry, error) {
 	}
 	out := []AuthorEntry{}
 	for _, a := range as {
+		if a.Key == store.BuiltinAuthorKey {
+			continue
+		}
 		e := AuthorEntry{PluginAuthor: a, Fingerprint: Fingerprint(a.Key), Plugins: []string{}}
 		for _, p := range ps {
 			if p.AuthorKey == a.Key {

@@ -65,6 +65,11 @@ func (h *hello) LinkPlan(ctx context.Context, req sdk.LinkRequest) (sdk.Plan, er
 	pl := sdk.Plan{Actions: []sdk.Action{}, Warnings: []string{}}
 	host := sdk.HostFrom(ctx)
 	switch req.Role {
+	case sdk.RoleConsumer:
+		if req.Port != portTLS {
+			return pl, fmt.Errorf("порт %s не поддерживается", req.Port)
+		}
+		return h.tlsPlan(ctx, host, req)
 	case sdk.RoleProvider:
 		if req.Action == sdk.ActionRemove {
 			pl.Actions = append(pl.Actions, sdk.Action{Title: "Отозвать адрес у «" + peerName(req) + "»", Risk: sdk.RiskInfo})
@@ -109,6 +114,9 @@ func peerName(req sdk.LinkRequest) string {
 
 func (h *hello) LinkApply(ctx context.Context, req sdk.LinkRequest, job *sdk.Job) (json.RawMessage, error) {
 	host := job.Host()
+	if req.Role == sdk.RoleConsumer && req.Port == portTLS {
+		return nil, h.tlsApply(ctx, req, job)
+	}
 	b, err := h.binding(ctx, host, req.Instance)
 	if err != nil {
 		return nil, err
@@ -140,6 +148,9 @@ func (h *hello) LinkApply(ctx context.Context, req sdk.LinkRequest, job *sdk.Job
 }
 
 func (h *hello) LinkRemove(ctx context.Context, req sdk.LinkRequest, job *sdk.Job) error {
+	if req.Role == sdk.RoleConsumer && req.Port == portTLS {
+		return h.tlsRemove(ctx, req, job)
+	}
 	if req.Role != sdk.RoleClient {
 		return nil // a consumer just stops using the address
 	}
@@ -185,6 +196,9 @@ func editHosts(ctx context.Context, host *sdk.Host, req sdk.LinkRequest, line st
 
 func (h *hello) LinkStatus(ctx context.Context, req sdk.LinkRequest) (sdk.LinkStatus, error) {
 	host := sdk.HostFrom(ctx)
+	if req.Role == sdk.RoleConsumer {
+		return h.tlsStatus(ctx, req)
+	}
 	b, err := h.binding(ctx, host, req.Instance)
 	if err != nil {
 		return sdk.LinkStatus{State: sdk.StateUnknown, Detail: err.Error()}, nil

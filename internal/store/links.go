@@ -40,6 +40,15 @@ type PluginLink struct {
 	Detail           string
 	CreatedAt        time.Time
 	CheckedAt        *time.Time
+	// Request is what the consumer asked for (types with a request, e.g.
+	// tls.cert: the CSR and the names); "{}" otherwise.
+	Request string
+	// Renewal of renewable types: when the binding expires, when to renew
+	// it, the last renewal error and when to retry.
+	ExpiresAt    *time.Time
+	RenewAfter   *time.Time
+	RenewError   string
+	RenewRetryAt *time.Time
 }
 
 // Active reports whether the link is in use (not a draft, not being
@@ -53,7 +62,7 @@ func (l PluginLink) Active() bool {
 }
 
 const linkCols = `id, kind, provider_instance, provider_port, consumer_instance, consumer_port, device_ref, config, binding,
-	status, detail, created_at, checked_at`
+	status, detail, created_at, checked_at, request, expires_at, renew_after, renew_error, renew_retry_at`
 
 func scanLink(sc interface{ Scan(...any) error }) (PluginLink, error) {
 	var (
@@ -63,14 +72,17 @@ func scanLink(sc interface{ Scan(...any) error }) (PluginLink, error) {
 		dev     sql.NullString
 		created int64
 		checked sql.NullInt64
+
+		expires, renew, retry sql.NullInt64
 	)
 	err := sc.Scan(&l.ID, &l.Kind, &l.ProviderInstance, &l.ProviderPort, &cons, &cport, &dev, &l.Config, &l.Binding,
-		&l.Status, &l.Detail, &created, &checked)
+		&l.Status, &l.Detail, &created, &checked, &l.Request, &expires, &renew, &l.RenewError, &retry)
 	if errors.Is(err, sql.ErrNoRows) {
 		return l, ErrNotFound
 	}
 	l.ConsumerInstance, l.ConsumerPort, l.DeviceRef = cons.Int64, cport.String, dev.String
 	l.CreatedAt, l.CheckedAt = fromMS(created), fromNullMS(checked)
+	l.ExpiresAt, l.RenewAfter, l.RenewRetryAt = fromNullMS(expires), fromNullMS(renew), fromNullMS(retry)
 	return l, err
 }
 
@@ -232,6 +244,36 @@ func (s *Store) SetLinkHealth(ctx context.Context, id int64, status, detail stri
 func (s *Store) SetLinkBinding(ctx context.Context, id int64, binding string) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE plugin_links SET binding = ? WHERE id = ?`, binding, id)
 	return err
+}
+
+// SetLinkRequest stores the request of a link (what the consumer asked).
+func (s *Store) SetLinkRequest(ctx context.Context, id int64, request string) error {
+	if request == "" {
+		request = "{}"
+	}
+	_, err := s.db.ExecContext(ctx, `UPDATE plugin_links SET request = ? WHERE id = ?`, request, id)
+	return err
+}
+
+// SetLinkRenewal records a renewed (or first) binding of a renewable link:
+// the expiry, when to renew and a cleared renewal error.
+func (s *Store) SetLinkRenewal(ctx context.Context, id int64, expires, renewAfter time.Time) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE plugin_links SET expires_at = ?, renew_after = ?, renew_error = '', renew_retry_at = NULL
+		WHERE id = ?`, ms(expires), ms(renewAfter), id)
+	return err
+}
+
+// SetLinkRenewError records a failed renewal and when to try again.
+func (s *Store) SetLinkRenewError(ctx context.Context, id int64, msg string, retryAt time.Time) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE plugin_links SET renew_error = ?, renew_retry_at = ? WHERE id = ?`, msg, ms(retryAt), id)
+	return err
+}
+
+// DueRenewals returns the active links whose renewal is due at now (and
+// whose retry time, if any, has come).
+func (s *Store) DueRenewals(ctx context.Context, now time.Time) ([]PluginLink, error) {
+	return s.queryLinks(ctx, `renew_after IS NOT NULL AND renew_after <= ? AND (renew_retry_at IS NULL OR renew_retry_at <= ?)
+		AND status NOT IN (?, ?, ?, ?)`, ms(now), ms(now), LinkDraft, LinkApplying, LinkRemoving, LinkOrphaned)
 }
 
 // DeleteLink removes a link; its grants go with it.
