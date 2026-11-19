@@ -10,7 +10,6 @@
   import Connect from './pages/Connect.svelte';
   import Targets from './pages/Targets.svelte';
   import Guests from './pages/Guests.svelte';
-  import NetMap from './pages/Map.svelte';
   import Services from './pages/Services.svelte';
   import Install from './pages/Install.svelte';
   import Moved from './pages/Moved.svelte';
@@ -103,7 +102,8 @@
       {#if route.name === 'jobs'}<Jobs />
       {:else if route.name === 'job'}<JobDetail id={route.id} />
       {:else if route.name === 'targets'}<Targets />
-      {:else if route.name === 'map'}<NetMap />
+      {:else if route.name === 'map'}
+        {#await import('./pages/Map.svelte')}<div class="flex justify-center py-12"><span class="loading loading-spinner loading-lg"></span></div>{:then m}<m.default />{/await}
       {:else if route.name === 'services'}<Services />
       {:else if route.name === 'plugins'}
         {#await import('./pages/Plugins.svelte')}<div class="flex justify-center py-12"><span class="loading loading-spinner loading-lg"></span></div>{:then m}<m.default />{/await}

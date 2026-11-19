@@ -108,21 +108,25 @@ export function defaultFilters() {
   return { clients: true, stopped: false, query: '' };
 }
 
-function matches(h, q) {
+function matches(h, q, extra = '') {
   if (!q) return true;
-  const hay = [h.ip, h.mac, h.vendor, hostName(h), ...(h.names || []).map((n) => n.name), ...(h.services || []).flatMap((s) => [s.name, s.title, s.version, s.rule])]
+  const hay = [h.ip, h.mac, h.vendor, hostName(h), extra, ...(h.names || []).map((n) => n.name), ...(h.services || []).flatMap((s) => [s.name, s.title, s.version, s.rule])]
     .filter(Boolean)
     .join('\n')
     .toLowerCase();
   return hay.includes(q);
 }
 
-export function filterHosts(hosts, f = defaultFilters()) {
+// opts.keep — IPs shown regardless of the «клиенты»/«остановленные» switches (hosts with
+// plugin instances); opts.extra — IP → extra text the search also looks in (instance names).
+export function filterHosts(hosts, f = defaultFilters(), opts = {}) {
   const q = (f.query || '').trim().toLowerCase();
   return (hosts || []).filter((h) => {
-    if (!f.clients && classify(h) === 'client') return false;
-    if (!f.stopped && hostStatus(h) !== 'alive') return false;
-    return matches(h, q);
+    if (!opts.keep?.has(h.ip)) {
+      if (!f.clients && classify(h) === 'client') return false;
+      if (!f.stopped && hostStatus(h) !== 'alive') return false;
+    }
+    return matches(h, q, opts.extra?.get(h.ip) || '');
   });
 }
 
@@ -144,9 +148,9 @@ const nodeOf = (h) => ({
 
 // Builds the graph for the filtered hosts. view = the answer of GET /network.
 // Returns { nodes, edges, counts } where nodes have no positions yet (see layout.js).
-export function buildGraph(view, filters = defaultFilters()) {
+export function buildGraph(view, filters = defaultFilters(), opts = {}) {
   const all = view?.hosts || [];
-  const shown = filterHosts(all, filters);
+  const shown = filterHosts(all, filters, opts);
   const subnets = (view?.subnets || []).filter((s) => !s.error);
   const nodes = [];
   const edges = [];

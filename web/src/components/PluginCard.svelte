@@ -94,6 +94,9 @@
       </div>
       {#if !plugin.dev && !job}
         <div class="flex flex-wrap gap-2 justify-end">
+          {#if link}
+            <a class="btn btn-sm btn-primary btn-outline" {href} data-testid="plugin-instances-open">Экземпляры ({plugin.instances ?? 0})</a>
+          {/if}
           {#if plugin.update}
             <button class="btn btn-sm btn-info" onclick={() => (updating = true)} disabled={busy} title={plugin.update.new_permissions?.length ? 'Новые права: ' + plugin.update.new_permissions.join(', ') : ''} data-testid="plugin-update"><ArrowUpCircle size={14} /> Обновить до {plugin.update.to}</button>
           {/if}

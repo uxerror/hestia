@@ -112,5 +112,13 @@ export const api = {
   pluginCatalog: () => request('GET', '/plugins/catalog'),
   refreshPluginCatalog: () => request('POST', '/plugins/catalog/refresh'),
   fetchCatalogPackage: (id) => request('POST', '/plugins/packages/catalog', { id }),
+  graph: () => request('GET', '/graph'),
+  saveGraphPositions: (positions) => request('PUT', '/graph/positions', { positions }),
+  resetGraphPositions: () => request('DELETE', '/graph/positions'),
+  linkCandidates: (instance, port, dir) => request('GET', `/plugins/links/candidates?instance=${encodeURIComponent(instance)}&port=${encodeURIComponent(port)}&dir=${encodeURIComponent(dir)}`),
+  planLink: (body) => request('POST', '/plugins/links/plan', body),
+  planRemoveLink: (id) => request('POST', '/plugins/links/' + encodeURIComponent(id) + '/plan', { action: 'remove' }),
+  link: (id, refresh = false) => request('GET', '/plugins/links/' + encodeURIComponent(id) + (refresh ? '?status=refresh' : '')),
+  planCompose: (body) => request('POST', '/plugins/compose/plan', body),
   deleteTarget: (id, revert) => request('DELETE', '/targets/' + encodeURIComponent(id) + '?revert=' + (revert ? 'true' : 'false')),
 };

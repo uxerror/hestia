@@ -4,7 +4,10 @@
   import { instanceStatusInfo, safeUrl } from '../lib/plugins.js';
   import PluginCard from '../components/PluginCard.svelte';
   import InstanceWizard from '../components/InstanceWizard.svelte';
-  import { ArrowLeft, Plus, Pencil, Trash2, ExternalLink, RefreshCw } from 'lucide-svelte';
+  import LinkDialog from '../components/LinkDialog.svelte';
+  import { linkStatusInfo, linkSides } from '../lib/linkpanel.js';
+  import { linksOfInstance, instanceById } from '../lib/mapgraph.js';
+  import { ArrowLeft, Plus, Pencil, Trash2, ExternalLink, RefreshCw, Link2 } from 'lucide-svelte';
 
   let { id } = $props();
 
@@ -14,6 +17,15 @@
   let instError = $state('');
   let refreshing = $state({}); // instance id → status refresh in flight
   let wizard = $state(null); // {mode, instance}
+  let graph = $state(null); // GET /graph: the links of the instances
+  let linkDlg = $state(null); // {mode: 'new', instanceId} | {mode: 'remove', link}
+
+  function loadGraph() {
+    return api
+      .graph()
+      .then((g) => (graph = g))
+      .catch(() => {});
+  }
 
   function loadPlugin() {
     return api
@@ -64,6 +76,7 @@
   $effect(() => {
     loadPlugin();
     loadInstances(true);
+    loadGraph();
   });
 
   function changed(kind) {
@@ -74,6 +87,7 @@
   function afterApply() {
     loadInstances(true);
     loadPlugin();
+    loadGraph();
   }
 
   const canManage = $derived(!!plugin && plugin.enabled && plugin.state === 'connected');
@@ -133,6 +147,33 @@
               </div>
             {/if}
             <div class="text-xs opacity-60">Проверено: {fmtTime(inst.checked_at)} · Создан: {fmtTime(inst.created_at)}</div>
+            {#if graph}
+              {@const gi = instanceById(graph, inst.id)}
+              {@const links = linksOfInstance(graph, inst.id)}
+              {#if gi && (gi.provides.length || gi.requires.length || links.length)}
+                <div class="grid gap-1 mt-1 border-t border-base-300 pt-2" data-testid="instance-links">
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm font-semibold">Связи</span>
+                    <span class="flex-1"></span>
+                    <button class="btn btn-xs" onclick={() => (linkDlg = { mode: 'new', instanceId: inst.id })} disabled={!canManage} data-testid="link-new"><Link2 size={14} /> Связать…</button>
+                  </div>
+                  {#if links.length === 0}
+                    <span class="text-xs opacity-70">Связей нет.</span>
+                  {/if}
+                  {#each links as l (l.id)}
+                    {@const s = linkSides(l)}
+                    {@const ls = linkStatusInfo(l.status)}
+                    <div class="flex flex-wrap items-center gap-2 text-sm" data-testid="link-row">
+                      <span class="badge badge-sm {ls.cls}" data-testid="link-row-status">{ls.label}</span>
+                      <span class="break-words min-w-0">{s.provider} → {s.consumer}</span>
+                      {#if l.detail}<span class="text-xs opacity-70 break-words">{l.detail}</span>{/if}
+                      <span class="flex-1"></span>
+                      <button class="btn btn-ghost btn-xs text-error" onclick={() => (linkDlg = { mode: 'remove', link: l })} disabled={!canManage} data-testid="link-row-remove"><Trash2 size={12} /> {l.status === 'orphaned' ? 'Удалить запись' : 'Удалить'}</button>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+            {/if}
           </div>
         </div>
       {/each}
@@ -148,4 +189,10 @@
 
 {#if wizard && plugin}
   <InstanceWizard {plugin} instance={wizard.instance} mode={wizard.mode} instances={instances || []} onchanged={afterApply} onclose={(c) => ((wizard = null), c && afterApply())} />
+{/if}
+
+{#if linkDlg}
+  {#key linkDlg}
+    <LinkDialog {graph} mode={linkDlg.mode} instanceId={linkDlg.instanceId || 0} link={linkDlg.link || null} onchanged={afterApply} onclose={(c) => ((linkDlg = null), c && afterApply())} />
+  {/key}
 {/if}
