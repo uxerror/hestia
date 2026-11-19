@@ -44,6 +44,13 @@
   предлагает перенос + удаление (с HestiaBox — тот же IP), может быть первичным или вторичным DNS.
   Первый этап: каркас + граф + HestiaCA → HTTPS для Hestia.
 
+- Каркас плагинов 2a-1 (2026-11-19, 02h): свой JSON-RPC 2.0 (NDJSON) по unix-сокету / stdio в
+  dev; песочница systemd `hestia-plugin@<id>` с DynamicUser для всех плагинов; монорепо (sdk/,
+  plugins/), каталог — подписанный index.json в релизе `plugins-catalog`; отдельный ключ
+  plugins.key; авторский ключ закрепляется при первой установке; API развёртывания Docker compose
+  (Debian-пакеты, nesting/keyctl для LXC по подтверждению, запрет privileged/host-маунтов);
+  модуль переименован в github.com/uxerror/hestia.
+
 ## Открыто
 
 - Где тестировать установку Proxmox на Debian (одноразовая VM — где именно, с разрешения).
